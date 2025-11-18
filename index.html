@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RetroCAM - Y2K Digital Camera</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+    <div class="camera-frame">
+        <!-- LCD Screen -->
+        <div id="lcd">
+            <!-- Camera View -->
+            <div id="ui-camera" class="ui-screen">
+                <div class="live-view">
+                    <div class="live-view-content">📸 LIVE VIEW</div>
+                </div>
+
+                <!-- Camera UI Overlays -->
+                <!-- Top-Left: Camera/Recording Icon -->
+                <div class="camera-ui-overlay top-left">
+                    <div class="camera-icon-container">
+                        <i data-lucide="camera" class="camera-icon"></i>
+                        <span class="recording-dot"></span>
+                    </div>
+                </div>
+
+                <!-- Top-Right: Timer -->
+                <div class="camera-ui-overlay top-right timer-display">
+                    <span class="timer-value">000000</span>
+                </div>
+
+                <!-- Upper-Right: Photo Count/Storage -->
+                <div class="camera-ui-overlay top-right storage-display">
+                    <span class="storage-value">100M</span>
+                </div>
+
+                <!-- Bottom-Right: SD Card Icon -->
+                <div class="camera-ui-overlay bottom-right">
+                    <div class="sd-card-container">
+                        <i data-lucide="save" class="sd-card-icon"></i>
+                        <span class="sd-indicator"></span>
+                    </div>
+                </div>
+
+                <!-- Bottom-Left: Timestamp -->
+                <div class="camera-ui-overlay bottom-left">
+                    <span class="timestamp-value">2024 01 01 00:00:00</span>
+                </div>
+
+                <div class="lcd-info">
+                    <span class="info-text">READY</span>
+                </div>
+            </div>
+
+            <!-- Menu Screen -->
+            <div id="ui-menu" class="ui-screen active">
+                <div class="menu-container">
+                    <div class="menu-grid">
+                        <button class="menu-icon-btn" data-action="camera" title="Camera">
+                            <i data-lucide="camera" class="menu-icon"></i>
+                        </button>
+                        <button class="menu-icon-btn" data-action="video" title="Film">
+                            <i data-lucide="film" class="menu-icon"></i>
+                        </button>
+                        <button class="menu-icon-btn" data-action="play" title="Play">
+                            <i data-lucide="play-circle" class="menu-icon"></i>
+                        </button>
+                        <button class="menu-icon-btn" data-action="gear" title="Settings">
+                            <i data-lucide="settings" class="menu-icon"></i>
+                        </button>
+                    </div>
+                    <div class="menu-label">사진</div>
+                </div>
+            </div>
+
+            <!-- Gallery Screen -->
+            <div id="ui-gallery" class="ui-screen">
+                <img id="gallery-image" src="" alt="Gallery photo">
+                <div id="gallery-empty" class="gallery-empty">NO PHOTOS</div>
+            </div>
+
+            <!-- Photo Preview Screen -->
+            <div id="ui-photo-preview" class="ui-screen">
+                <div class="preview-top-bar">
+                    <span class="preview-filename">PH0001.JPG</span>
+                    <span class="preview-counter">0001/0001</span>
+                </div>
+                <div class="preview-image-area">
+                    <img id="preview-image" src="" alt="Preview photo">
+                </div>
+                <div class="preview-bottom-bar">
+                    <span id="preview-timestamp">2024/01/01 00:00:00</span>
+                </div>
+                <div style="display: flex; gap: 10px; justify-content: center;">
+                    <button id="btn-save-photo" class="preview-button">SAVE</button>
+                    <button id="btn-back-camera" class="preview-button secondary">BACK</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right-side Physical Buttons -->
+        <div class="buttons-panel">
+            <!-- 1. Power button (top) -->
+            <button id="btn-power" class="round-btn power-btn" title="Power">
+                <i data-lucide="power" class="btn-icon"></i>
+            </button>
+
+            <!-- 2. Shutter/Select button -->
+            <button id="btn-shutter" class="round-btn shutter-btn" title="Shutter/Select">
+                <i data-lucide="circle" class="btn-icon"></i>
+            </button>
+
+            <!-- 3. Left/Right navigation buttons -->
+            <div class="navigation-buttons">
+                <button id="btn-left" class="nav-btn left-btn" title="Left">
+                    <i data-lucide="chevron-left" class="btn-icon"></i>
+                </button>
+                <button id="btn-right" class="nav-btn right-btn" title="Right">
+                    <i data-lucide="chevron-right" class="btn-icon"></i>
+                </button>
+            </div>
+
+            <!-- 4. Back button (bottom) -->
+            <button id="btn-back" class="round-btn back-btn" title="Back">
+                <i data-lucide="arrow-left" class="btn-icon"></i>
+            </button>
+        </div>
+    </div>
+
+    <script src="capture.js"></script>
+    <script src="camera.js"></script>
+    <script src="camera-ui.js"></script>
+    <script src="menu.js"></script>
+    <script src="photo-preview.js"></script>
+    <script src="gallery.js"></script>
+    <script>
+        lucide.createIcons();
+    </script>
+</body>
+</html>
