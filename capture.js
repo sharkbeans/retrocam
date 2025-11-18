@@ -64,6 +64,9 @@ class CameraCapture {
         const liveViewContainer = document.querySelector('.live-view');
         if (!liveViewContainer) return;
 
+        // Clear any previous image elements
+        liveViewContainer.innerHTML = '';
+
         // Create a single img element to reuse
         let liveViewImg = document.createElement('img');
         liveViewImg.style.width = '100%';
