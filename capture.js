@@ -34,11 +34,15 @@ class CameraCapture {
 
     async initCamera() {
         try {
+            // Use back camera on mobile, front camera on desktop
+            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            const facingMode = isMobile ? 'environment' : 'user';
+
             this.stream = await navigator.mediaDevices.getUserMedia({
                 video: {
                     width: { ideal: 640 },
                     height: { ideal: 480 },
-                    facingMode: 'user'
+                    facingMode: facingMode
                 },
                 audio: false
             });
@@ -57,22 +61,27 @@ class CameraCapture {
     }
 
     startLiveView() {
-        const liveViewCanvas = document.querySelector('.live-view');
-        if (!liveViewCanvas) return;
+        const liveViewContainer = document.querySelector('.live-view');
+        if (!liveViewContainer) return;
 
+        // Create a single img element to reuse
+        let liveViewImg = document.createElement('img');
+        liveViewImg.style.width = '100%';
+        liveViewImg.style.height = '100%';
+        liveViewImg.style.objectFit = 'cover';
+        liveViewContainer.appendChild(liveViewImg);
+
+        let frameCount = 0;
         const renderFrame = () => {
             if (this.isStreaming) {
                 // Draw video frame to canvas
                 this.ctx.drawImage(this.video, 0, 0, this.canvas.width, this.canvas.height);
 
-                // Convert to image and display
-                liveViewCanvas.innerHTML = '';
-                const img = document.createElement('img');
-                img.src = this.canvas.toDataURL('image/jpeg');
-                img.style.width = '100%';
-                img.style.height = '100%';
-                img.style.objectFit = 'cover';
-                liveViewCanvas.appendChild(img);
+                // Only update image every 2 frames to reduce flickering
+                if (frameCount % 2 === 0) {
+                    liveViewImg.src = this.canvas.toDataURL('image/jpeg');
+                }
+                frameCount++;
             }
             requestAnimationFrame(renderFrame);
         };
