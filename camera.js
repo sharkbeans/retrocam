@@ -78,6 +78,11 @@ class Camera {
                 e.preventDefault();
                 this.handleShutter();
             }
+            // Mobile volume buttons as shutter
+            if ((e.key === 'VolumeUp' || e.key === 'VolumeDown') && this.isPowerOn) {
+                e.preventDefault();
+                this.handleShutter();
+            }
         });
         console.log('Event listeners setup complete');
     }
