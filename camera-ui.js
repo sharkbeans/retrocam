@@ -7,6 +7,7 @@ class CameraUI {
     constructor() {
         this.recordingStartTime = null;
         this.isRecording = false;
+        this.timerValue = this.generateRandomTimer();
 
         this.initElements();
         this.startTimestampUpdate();
@@ -17,7 +18,12 @@ class CameraUI {
         this.timestampDisplay = document.querySelector('.timestamp-value');
         this.storageDisplay = document.querySelector('.storage-value');
         this.recordingDot = document.querySelector('.recording-dot');
-        this.sdIndicator = document.querySelector('.sd-indicator');
+        this.batteryLevel = document.querySelector('.battery-level');
+
+        // Set the initial random timer value in the DOM
+        if (this.timerDisplay) {
+            this.timerDisplay.textContent = this.timerValue;
+        }
     }
 
     startTimestampUpdate() {
@@ -64,9 +70,22 @@ class CameraUI {
 
     stopRecording() {
         this.isRecording = false;
+        this.generateNewRandomTimer();
+    }
+
+    generateRandomTimer() {
+        return String(Math.floor(Math.random() * 1000000)).padStart(6, '0');
+    }
+
+    generateNewRandomTimer() {
+        this.timerValue = this.generateRandomTimer();
         if (this.timerDisplay) {
-            this.timerDisplay.textContent = '000000';
+            this.timerDisplay.textContent = this.timerValue;
         }
+    }
+
+    getTimerValue() {
+        return this.timerValue;
     }
 
     updatePhotoCount(count) {
@@ -87,16 +106,10 @@ class CameraUI {
         }
     }
 
-    setSdCardStatus(available) {
-        // Show/hide SD card indicator based on availability
-        if (this.sdIndicator) {
-            if (available) {
-                this.sdIndicator.style.background = '#00ff00';
-                this.sdIndicator.style.boxShadow = '0 0 3px #00ff00';
-            } else {
-                this.sdIndicator.style.background = '#ff4444';
-                this.sdIndicator.style.boxShadow = '0 0 3px #ff4444';
-            }
+    updateBatteryDisplay(level) {
+        // Update battery level display
+        if (this.batteryLevel) {
+            this.batteryLevel.textContent = Math.round(level) + '%';
         }
     }
 

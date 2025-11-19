@@ -36,11 +36,11 @@
                     <span class="storage-value">100M</span>
                 </div>
 
-                <!-- Bottom-Right: SD Card Icon -->
+                <!-- Bottom-Right: Battery Icon -->
                 <div class="camera-ui-overlay bottom-right">
-                    <div class="sd-card-container">
-                        <i data-lucide="save" class="sd-card-icon"></i>
-                        <span class="sd-indicator"></span>
+                    <div class="battery-container">
+                        <i data-lucide="battery-full" class="battery-icon"></i>
+                        <span class="battery-level">85%</span>
                     </div>
                 </div>
 
@@ -54,8 +54,16 @@
                 </div>
             </div>
 
+            <!-- Startup Splash Screen -->
+            <div id="ui-startup" class="ui-screen">
+                <div class="startup-container">
+                    <img src="logo.png" alt="RetroCAM Logo" class="startup-logo">
+                    <div class="startup-glitch"></div>
+                </div>
+            </div>
+
             <!-- Menu Screen -->
-            <div id="ui-menu" class="ui-screen active">
+            <div id="ui-menu" class="ui-screen">
                 <div class="menu-container">
                     <div class="menu-grid">
                         <button class="menu-icon-btn" data-action="camera" title="Camera">
@@ -109,6 +117,7 @@
 
             <!-- 2. Shutter/Select button -->
             <button id="btn-shutter" class="round-btn shutter-btn" title="Shutter/Select">
+                <div class="status-led"></div>
                 <i data-lucide="circle" class="btn-icon"></i>
             </button>
 

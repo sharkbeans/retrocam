@@ -20,6 +20,7 @@ class Camera {
         this.rightBtn = document.getElementById('btn-right');
         this.backBtn = document.getElementById('btn-back');
         this.cameraFrame = document.querySelector('.camera-frame');
+        this.statusLed = document.querySelector('.status-led');
 
         // Debug logging
         console.log('Camera buttons initialized:', {
@@ -28,7 +29,8 @@ class Camera {
             leftBtn: !!this.leftBtn,
             rightBtn: !!this.rightBtn,
             backBtn: !!this.backBtn,
-            cameraFrame: !!this.cameraFrame
+            cameraFrame: !!this.cameraFrame,
+            statusLed: !!this.statusLed
         });
     }
 
@@ -81,12 +83,14 @@ class Camera {
     }
 
     initPowerOnState() {
-        // Start with power on
-        this.isPowerOn = true;
-        this.cameraFrame.style.opacity = '1';
-        this.cameraFrame.style.pointerEvents = 'auto';
-        // Show menu on startup
-        this.showScreen('ui-menu');
+        // Start with power off
+        this.isPowerOn = false;
+        this.cameraFrame.style.pointerEvents = 'none';
+        this.updateStatusLed();
+        // Close all screens
+        document.querySelectorAll('.ui-screen').forEach(screen => {
+            screen.classList.remove('active');
+        });
     }
 
     togglePower() {
@@ -105,14 +109,24 @@ class Camera {
         this.cameraFrame.style.opacity = '1';
         this.cameraFrame.style.pointerEvents = 'auto';
 
+        // Update status LED
+        this.updateStatusLed();
+
         // Ensure camera is ready
-        if (cameraCapture && !cameraCapture.isStreaming) {
+        if (cameraCapture && !cameraCapture.isStreaming && !cameraCapture.isInitializing) {
             console.log('Power on: Warming up camera...');
             cameraCapture.restartStream();
         }
 
-        // Show menu
-        this.showScreen('ui-menu');
+        // Show startup splash screen first
+        this.showScreen('ui-startup');
+
+        // Transition to menu after splash screen animation completes
+        setTimeout(() => {
+            if (this.isPowerOn) {
+                this.showScreen('ui-menu');
+            }
+        }, 2000);
     }
 
     powerOff() {
@@ -125,6 +139,9 @@ class Camera {
 
         // Disable camera frame interaction but keep it visible
         this.cameraFrame.style.pointerEvents = 'none';
+
+        // Update status LED
+        this.updateStatusLed();
 
         // Close any open screens
         document.querySelectorAll('.ui-screen').forEach(screen => {
@@ -178,6 +195,11 @@ class Camera {
 
             // Play shutter animation
             cameraCapture.playShutterAnimation(photoData.data);
+
+            // Generate new random timer value for next photo
+            if (cameraUI) {
+                cameraUI.generateNewRandomTimer();
+            }
         }
 
         setTimeout(() => {
@@ -250,6 +272,16 @@ class Camera {
 
     getCurrentScreen() {
         return document.querySelector('.ui-screen.active')?.id || 'ui-menu';
+    }
+
+    updateStatusLed() {
+        if (this.statusLed) {
+            if (this.isPowerOn) {
+                this.statusLed.classList.add('active');
+            } else {
+                this.statusLed.classList.remove('active');
+            }
+        }
     }
 }
 

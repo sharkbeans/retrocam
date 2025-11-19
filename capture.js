@@ -10,6 +10,7 @@ class CameraCapture {
         this.ctx = null;
         this.stream = null;
         this.isStreaming = false;
+        this.isInitializing = false;
         this.photoCount = 0;
         this.batteryLevel = 85;
 
@@ -33,6 +34,7 @@ class CameraCapture {
     }
 
     async initCamera() {
+        this.isInitializing = true;
         try {
             // Use back camera on mobile, front camera on desktop
             const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
@@ -52,10 +54,12 @@ class CameraCapture {
 
             this.video.onloadedmetadata = () => {
                 this.isStreaming = true;
+                this.isInitializing = false;
                 this.startLiveView();
             };
         } catch (error) {
             console.error('Camera access error:', error);
+            this.isInitializing = false;
             this.drawFallbackFrame();
         }
     }
@@ -115,7 +119,8 @@ class CameraCapture {
 
         // Top-Left: Timer display
         this.ctx.textAlign = 'left';
-        drawOutlinedText('000000', 8, 18, 'bold 14px monospace', '#ffffff');
+        const timerValue = cameraUI ? cameraUI.getTimerValue() : '000000';
+        drawOutlinedText(timerValue, 8, 18, 'bold 14px monospace', '#ffffff');
 
         // Top-Right: Storage display
         this.ctx.textAlign = 'right';
@@ -255,12 +260,17 @@ class CameraCapture {
         thumbnail.src = photoDataUrl;
         thumbnail.className = 'capture-thumbnail';
 
-        document.body.appendChild(thumbnail);
+        const cameraFrame = document.querySelector('.camera-frame');
+        if (cameraFrame) {
+            cameraFrame.appendChild(thumbnail);
+        } else {
+            document.body.appendChild(thumbnail);
+        }
 
         // Remove the element after animation completes
         setTimeout(() => {
             thumbnail.remove();
-        }, 600);
+        }, 1000);
     }
 }
 

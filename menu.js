@@ -28,13 +28,13 @@ class Menu {
                 // Start camera and show live view
                 if (cameraCapture) {
                     console.log('Starting camera mode...');
-                    if (!cameraCapture.isStreaming) {
+                    if (!cameraCapture.isStreaming && !cameraCapture.isInitializing) {
                         console.log('Camera not streaming, restarting stream...');
                         cameraCapture.restartStream().then(() => {
                             this.showScreen('ui-camera');
                         });
                     } else {
-                        console.log('Camera already streaming');
+                        console.log('Camera already streaming or initializing');
                         this.showScreen('ui-camera');
                     }
                 }

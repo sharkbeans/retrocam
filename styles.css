@@ -17,7 +17,7 @@
     --frame-shadow: #ccc;
     --button-color: #e8e8e8;
     --button-shadow: #999;
-    --lcd-color: #0a2a3a;
+    --lcd-color: #000000;
     --accent-color: #00b8ff;
     --text-color: #333;
     --menu-bg: #ffffff;
@@ -161,6 +161,77 @@ body {
 .info-text {
     color: #4db8ff;
     font-weight: bold;
+}
+
+/* ===== STARTUP SPLASH SCREEN ===== */
+#ui-startup {
+    background: #f5f5f5;
+    flex-direction: column;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+}
+
+.startup-container {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+}
+
+.startup-logo {
+    max-width: 150px;
+    max-height: 150px;
+    width: auto;
+    height: auto;
+    animation: startupFadeIn 0.8s ease-out;
+    position: relative;
+    z-index: 2;
+    filter: drop-shadow(2px 2px 4px rgba(0, 0, 0, 0.1));
+}
+
+/* Y2K Fuzzy grain effect overlay */
+.startup-glitch {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background:
+        repeating-linear-gradient(
+            0deg,
+            rgba(255, 255, 255, 0.03),
+            rgba(255, 255, 255, 0.03) 1px,
+            transparent 1px,
+            transparent 2px
+        );
+    pointer-events: none;
+    z-index: 1;
+    animation: grain 0.8s steps(2) infinite;
+}
+
+@keyframes startupFadeIn {
+    0% {
+        opacity: 0;
+        transform: scale(0.9);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@keyframes grain {
+    0%, 100% {
+        background-position: 0 0;
+        opacity: 0.05;
+    }
+    50% {
+        background-position: 40px 60px;
+        opacity: 0.08;
+    }
 }
 
 /* ===== MENU SCREEN ===== */
@@ -422,6 +493,28 @@ body {
     height: 50px;
 }
 
+/* Status LED indicator on shutter button */
+.status-led {
+    position: absolute;
+    top: -6px;
+    right: -16px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #4a4a4a;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
+    transition: all 0.3s ease;
+    z-index: 2;
+}
+
+.status-led.active {
+    background: #0066ff;
+    box-shadow:
+        0 0 8px #0088ff,
+        0 0 16px #0066ff,
+        inset 0 1px 2px rgba(255, 255, 255, 0.3);
+}
+
 .back-btn {
     width: 50px;
     height: 50px;
@@ -546,13 +639,15 @@ body {
 .camera-icon {
     width: 30px;
     height: 30px;
-    color: #333333;
-    fill: currentColor;
-    stroke-width: 0;
+    color: #ffffff;
+    fill: #ffffff;
+    stroke-width: 1;
+    stroke: #000000;
     position: relative;
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    filter: drop-shadow(-1px -1px 0 #ffffff) drop-shadow(1px -1px 0 #000000) drop-shadow(-1px 1px 0 #000000) drop-shadow(1px 1px 0 #ffffff);
 }
 
 .camera-icon::after {
@@ -560,10 +655,12 @@ body {
     position: absolute;
     width: 12px;
     height: 12px;
-    background: #aaaaaa;
+    background: #ffffff;
     border-radius: 50%;
     z-index: 10;
     box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
+    border: 1px solid #000000;
+    filter: drop-shadow(-1px -1px 0 #ffffff) drop-shadow(1px -1px 0 #000000) drop-shadow(-1px 1px 0 #000000) drop-shadow(1px 1px 0 #ffffff);
 }
 
 .recording-dot {
@@ -587,28 +684,30 @@ body {
 
 @keyframes captureAnimation {
     0% {
-        transform: translate(0, 0) scale(1);
+        transform: translate(-50%, -50%) scale(1);
         opacity: 1;
     }
     100% {
-        transform: translate(320px, -250px) scale(0.1);
-        opacity: 0;
+        transform: translate(calc(-50% + 30px), calc(-50% - 50px)) scale(0.25);
+        opacity: 0.8;
     }
 }
 
 .capture-thumbnail {
-    position: fixed;
+    position: absolute;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
     width: 300px;
     height: 225px;
-    border: 2px solid var(--accent-color);
+    border: 8px solid #ffffff;
+    box-shadow:
+        inset 0 0 0 2px #000000,
+        4px 4px 8px rgba(0, 0, 0, 0.4);
     background: #000;
     z-index: 10000;
     pointer-events: none;
-    animation: captureAnimation 0.6s ease-in forwards;
-    box-shadow: 0 0 20px rgba(0, 184, 255, 0.5);
+    animation: captureAnimation 1s steps(8, end) forwards;
 }
 
 /* Top-Right: Timer Display */
@@ -657,33 +756,43 @@ body {
         0 2px 0 #000000;
 }
 
-/* Bottom-Right: SD Card */
+/* Bottom-Right: Battery */
 .camera-ui-overlay.bottom-right {
     bottom: 8px;
     right: 8px;
 }
 
-.sd-card-container {
+.battery-container {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 6px;
     font-size: 14px;
 }
 
-.sd-card-icon {
-    width: 18px;
-    height: 18px;
+.battery-icon {
+    width: 20px;
+    height: 20px;
     color: #ffffff;
-    stroke-width: 2;
+    stroke-width: 1;
+    stroke: #000000;
+    fill: #00ff00;
+    filter: drop-shadow(-1px -1px 0 #ffffff) drop-shadow(1px -1px 0 #000000) drop-shadow(-1px 1px 0 #000000) drop-shadow(1px 1px 0 #ffffff);
 }
 
-.sd-indicator {
-    display: inline-block;
-    width: 4px;
-    height: 4px;
-    border-radius: 50%;
-    background: #00ff00;
-    box-shadow: 0 0 3px #00ff00;
+.battery-level {
+    font-size: 11px;
+    font-weight: bold;
+    color: #ffffff;
+    letter-spacing: 1px;
+    text-shadow:
+        -1px -1px 0 #000000,
+        1px -1px 0 #000000,
+        -1px 1px 0 #000000,
+        1px 1px 0 #000000,
+        -2px 0 0 #000000,
+        2px 0 0 #000000,
+        0 -2px 0 #000000,
+        0 2px 0 #000000;
 }
 
 /* Bottom-Left: Timestamp */
@@ -719,4 +828,10 @@ body {
         --lcd-offset-y: 30px;
         --button-size: 45px;
     }
+}
+/* ===== STARTUP SCREEN ===== */
+.startup-logo {
+    width: 450px;
+    height: auto;
+    max-width: 80%;
 }
