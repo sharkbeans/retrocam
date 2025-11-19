@@ -287,7 +287,7 @@ body {
 }
 
 .menu-label {
-    font-size: 12px;
+    font-size: 18px;
     font-weight: 600;
     color: #444;
     letter-spacing: 1px;
@@ -410,6 +410,32 @@ body {
 
 .gallery-empty.show {
     display: block;
+}
+
+.gallery-counter {
+    position: absolute;
+    bottom: 15px;
+    left: 50%;
+    transform: translateX(-50%);
+    pointer-events: none;
+}
+
+#gallery-counter-text {
+    display: block;
+    font-size: 13px;
+    font-weight: bold;
+    font-family: var(--font-family);
+    letter-spacing: 1px;
+    color: #ffffff;
+    text-shadow:
+        -1px -1px 0 #000000,
+        1px -1px 0 #000000,
+        -1px 1px 0 #000000,
+        1px 1px 0 #000000,
+        -2px 0 0 #000000,
+        2px 0 0 #000000,
+        0 -2px 0 #000000,
+        0 2px 0 #000000;
 }
 
 /* ===== PHYSICAL BUTTONS PANEL ===== */
@@ -688,7 +714,7 @@ body {
         opacity: 1;
     }
     100% {
-        transform: translate(calc(-50% + 30px), calc(-50% - 50px)) scale(0.25);
+        transform: translate(calc(-50% + 110px), calc(-50% - 110px)) scale(0.25);
         opacity: 0.8;
     }
 }
@@ -829,6 +855,20 @@ body {
         --button-size: 45px;
     }
 }
+
+/* Mobile landscape orientation */
+@media (max-width: 900px) and (orientation: landscape) {
+    :root {
+        --frame-width: 630px;
+        --frame-height: 300px;
+        --lcd-width: 420px;
+        --lcd-height: 260px;
+        --lcd-offset-x: 80px;
+        --lcd-offset-y: 20px;
+        --button-size: 42px;
+    }
+}
+
 /* ===== STARTUP SCREEN ===== */
 .startup-logo {
     width: 450px;

@@ -16,6 +16,7 @@ class Gallery {
     initElements() {
         this.galleryImage = document.getElementById('gallery-image');
         this.galleryEmpty = document.getElementById('gallery-empty');
+        this.galleryCounter = document.getElementById('gallery-counter-text');
     }
 
     initEventListeners() {
@@ -40,12 +41,18 @@ class Gallery {
         if (this.galleryArray.length === 0) {
             this.galleryImage.style.display = 'none';
             this.galleryEmpty.classList.add('show');
+            this.galleryCounter.textContent = '< 0/0 >';
         } else {
             this.galleryImage.style.display = 'block';
             this.galleryEmpty.classList.remove('show');
 
             const photo = this.galleryArray[this.currentIndex];
             this.galleryImage.src = photo.data;
+
+            // Update counter display: < currentIndex/totalPhotos >
+            const currentNumber = this.currentIndex + 1;
+            const totalPhotos = this.galleryArray.length;
+            this.galleryCounter.textContent = `< ${currentNumber}/${totalPhotos} >`;
         }
     }
 
