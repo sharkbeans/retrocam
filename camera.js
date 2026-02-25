@@ -217,8 +217,12 @@ class Camera {
 
         const currentScreen = this.getCurrentScreen();
 
+        // On menu, navigate left
+        if (currentScreen === 'ui-menu' && menu) {
+            menu.navigateLeft();
+        }
         // On gallery, go to previous photo
-        if (currentScreen === 'ui-gallery' && gallery) {
+        else if (currentScreen === 'ui-gallery' && gallery) {
             gallery.previousPhoto();
         }
     }
@@ -228,8 +232,12 @@ class Camera {
 
         const currentScreen = this.getCurrentScreen();
 
+        // On menu, navigate right
+        if (currentScreen === 'ui-menu' && menu) {
+            menu.navigateRight();
+        }
         // On gallery, go to next photo
-        if (currentScreen === 'ui-gallery' && gallery) {
+        else if (currentScreen === 'ui-gallery' && gallery) {
             gallery.nextPhoto();
         }
     }
@@ -254,8 +262,9 @@ class Camera {
     }
 
     selectMenuOption() {
-        // This can be enhanced when menu navigation is implemented
-        console.log('Menu option selected');
+        if (menu) {
+            menu.selectCurrent();
+        }
     }
 
     openGalleryPhoto() {

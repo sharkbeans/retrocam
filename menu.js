@@ -5,12 +5,17 @@
 
 class Menu {
     constructor() {
+        this.currentIndex = 0;
+        this.menuActions = ['camera', 'video', 'play', 'gear'];
+        this.menuLabels = ['사진', '비디오', '갤러리', '설정'];
         this.initElements();
         this.initEventListeners();
+        this.updateMenuSelection();
     }
 
     initElements() {
         this.menuIconBtns = document.querySelectorAll('.menu-icon-btn');
+        this.menuLabel = document.querySelector('.menu-label');
     }
 
     initEventListeners() {
@@ -20,6 +25,32 @@ class Menu {
                 this.handleMenuAction(action);
             });
         });
+    }
+
+    navigateLeft() {
+        this.currentIndex = (this.currentIndex - 1 + this.menuActions.length) % this.menuActions.length;
+        this.updateMenuSelection();
+    }
+
+    navigateRight() {
+        this.currentIndex = (this.currentIndex + 1) % this.menuActions.length;
+        this.updateMenuSelection();
+    }
+
+    selectCurrent() {
+        const action = this.menuActions[this.currentIndex];
+        this.handleMenuAction(action);
+    }
+
+    updateMenuSelection() {
+        this.menuIconBtns.forEach((btn, index) => {
+            if (index === this.currentIndex) {
+                btn.classList.add('selected');
+            } else {
+                btn.classList.remove('selected');
+            }
+        });
+        this.menuLabel.textContent = this.menuLabels[this.currentIndex];
     }
 
     handleMenuAction(action) {
