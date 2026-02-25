@@ -843,8 +843,8 @@ body {
         0 2px 0 #000000;
 }
 
-/* ===== RESPONSIVE ===== */
-@media (max-width: 900px) {
+/* ===== RESPONSIVE - DESKTOP ===== */
+@media (max-width: 900px) and (min-width: 769px) {
     :root {
         --frame-width: 544px;
         --frame-height: 340px;
@@ -856,16 +856,183 @@ body {
     }
 }
 
-/* Mobile landscape orientation */
-@media (max-width: 900px) and (orientation: landscape) {
-    :root {
-        --frame-width: 630px;
-        --frame-height: 300px;
-        --lcd-width: 420px;
-        --lcd-height: 260px;
-        --lcd-offset-x: 80px;
-        --lcd-offset-y: 20px;
-        --button-size: 42px;
+/* ===== MOBILE FULLSCREEN MODE ===== */
+@media (max-width: 768px) {
+    html, body {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        margin: 0;
+        padding: 0;
+        background: #000;
+        touch-action: none;
+        -webkit-touch-callout: none;
+        -webkit-user-select: none;
+        user-select: none;
+        position: fixed;
+        inset: 0;
+    }
+
+    body {
+        display: flex;
+        align-items: stretch;
+        justify-content: stretch;
+    }
+
+    .camera-frame {
+        width: 100% !important;
+        height: 100% !important;
+        max-width: none;
+        max-height: none;
+        border-radius: 0;
+        box-shadow: none;
+        padding: 0;
+        background: #000;
+        position: fixed;
+        inset: 0;
+    }
+
+    #lcd {
+        position: absolute;
+        top: 0 !important;
+        left: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
+        border-radius: 0;
+        box-shadow: none;
+    }
+
+    /* Buttons overlay on top of the LCD */
+    .buttons-panel {
+        position: fixed;
+        right: 8px;
+        top: 50%;
+        transform: translateY(-50%);
+        flex-direction: column;
+        gap: 10px;
+        z-index: 10001;
+    }
+
+    .round-btn {
+        width: 44px;
+        height: 44px;
+        opacity: 0.7;
+        background: linear-gradient(145deg, rgba(240,240,240,0.8), rgba(224,224,224,0.8));
+        backdrop-filter: blur(4px);
+    }
+
+    .round-btn::after {
+        width: 34px;
+        height: 34px;
+        background: linear-gradient(145deg, rgba(216,216,216,0.8), rgba(232,232,232,0.8));
+    }
+
+    .power-btn {
+        margin-left: 0;
+        width: 48px;
+        height: 48px;
+    }
+
+    .power-btn .btn-icon {
+        width: 26px;
+        height: 26px;
+    }
+
+    .shutter-btn {
+        width: 52px;
+        height: 52px;
+        opacity: 0.85;
+    }
+
+    .nav-btn {
+        width: 38px;
+        height: 38px;
+        opacity: 0.7;
+        background: linear-gradient(145deg, rgba(240,240,240,0.8), rgba(224,224,224,0.8));
+        backdrop-filter: blur(4px);
+    }
+
+    .nav-btn::after {
+        background: linear-gradient(145deg, rgba(216,216,216,0.8), rgba(232,232,232,0.8));
+    }
+
+    .btn-icon {
+        width: 20px;
+        height: 20px;
+    }
+
+    .left-btn .btn-icon,
+    .right-btn .btn-icon {
+        width: 18px;
+        height: 18px;
+    }
+
+    .navigation-buttons {
+        gap: 6px;
+    }
+
+    /* Account for safe areas (notch, rounded corners) */
+    .buttons-panel {
+        right: max(8px, env(safe-area-inset-right));
+        padding-top: env(safe-area-inset-top);
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    .camera-ui-overlay.bottom-left {
+        bottom: max(8px, env(safe-area-inset-bottom));
+        left: max(8px, env(safe-area-inset-left));
+    }
+
+    .camera-ui-overlay.top-left {
+        top: max(8px, env(safe-area-inset-top));
+        left: max(8px, env(safe-area-inset-left));
+    }
+
+    .camera-ui-overlay.top-right.timer-display {
+        top: max(8px, env(safe-area-inset-top));
+        right: max(70px, calc(env(safe-area-inset-right) + 65px));
+    }
+
+    .camera-ui-overlay.top-right.storage-display {
+        top: max(30px, calc(env(safe-area-inset-top) + 22px));
+        right: max(70px, calc(env(safe-area-inset-right) + 65px));
+    }
+
+    .camera-ui-overlay.bottom-right {
+        bottom: max(8px, env(safe-area-inset-bottom));
+        right: max(70px, calc(env(safe-area-inset-right) + 65px));
+    }
+
+    /* Capture thumbnail smaller on mobile */
+    .capture-thumbnail {
+        width: 200px;
+        height: 150px;
+        border-width: 4px;
+    }
+}
+
+/* Portrait orientation prompt - tell user to rotate */
+@media (max-width: 768px) and (orientation: portrait) {
+    body::after {
+        content: 'ROTATE DEVICE';
+        position: fixed;
+        inset: 0;
+        background: #000;
+        color: #00b8ff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: 'Courier New', monospace;
+        font-size: 18px;
+        font-weight: bold;
+        letter-spacing: 4px;
+        z-index: 99999;
+        animation: rotateHint 2s ease-in-out infinite;
+    }
+
+    @keyframes rotateHint {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
     }
 }
 

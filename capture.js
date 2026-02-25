@@ -24,10 +24,11 @@ class CameraCapture {
         this.video.setAttribute('playsinline', 'true');
         this.video.style.display = 'none';
 
-        // Create canvas for rendering
+        // Create canvas for rendering - use higher res on mobile for fullscreen
         this.canvas = document.createElement('canvas');
-        this.canvas.width = 480;
-        this.canvas.height = 360;
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        this.canvas.width = isMobile ? 960 : 480;
+        this.canvas.height = isMobile ? 720 : 360;
         this.ctx = this.canvas.getContext('2d');
 
         document.body.appendChild(this.video);
@@ -42,8 +43,8 @@ class CameraCapture {
 
             this.stream = await navigator.mediaDevices.getUserMedia({
                 video: {
-                    width: { ideal: 640 },
-                    height: { ideal: 480 },
+                    width: { ideal: isMobile ? 1280 : 640 },
+                    height: { ideal: isMobile ? 960 : 480 },
                     facingMode: facingMode
                 },
                 audio: false
