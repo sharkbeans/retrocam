@@ -43,10 +43,9 @@ class PhotoPreview {
         this.previewTimestamp.textContent = timestamp || this.getTimestamp();
     }
 
-    saveToGallery() {
+    async saveToGallery() {
         if (!this.currentPhoto) return;
 
-        // Add to gallery array
         const photoEntry = {
             data: this.currentPhoto,
             number: this.currentPhotoNumber,
@@ -56,13 +55,18 @@ class PhotoPreview {
         this.galleryArray.push(photoEntry);
         this.saveGalleryToStorage();
 
-        // Flash LED indicator
+        if (gallery) {
+            gallery.loadGallery();
+        }
+
+        const saveResult = await this.saveImageToDevice(photoEntry);
+
         this.flashLED();
 
-        // Show confirmation
-        alert(`Photo PH${this.currentPhotoNumber}.JPG saved!`);
+        if (saveResult !== 'shared') {
+            alert(`Photo ${this.buildFilename(this.currentPhotoNumber)} saved!`);
+        }
 
-        // Return to camera
         this.goBackToCamera();
     }
 
@@ -132,6 +136,95 @@ class PhotoPreview {
         const minutes = String(now.getMinutes()).padStart(2, '0');
         const seconds = String(now.getSeconds()).padStart(2, '0');
         return `${year}/${month}/${day} ${hours}:${minutes}:${seconds}`;
+    }
+
+    buildFilename(photoNumber) {
+        return `PH${photoNumber}.JPG`;
+    }
+
+    async saveImageToDevice(photoEntry) {
+        const filename = this.buildFilename(photoEntry.number);
+
+        if (this.isMobileDevice() && typeof navigator.share === 'function') {
+            try {
+                const file = await this.createPhotoFile(photoEntry.data, filename);
+
+                if (this.canUseNativeShare(file)) {
+                    await navigator.share({
+                        files: [file],
+                        title: 'RetroCAM Photo',
+                        text: `Check out my photo from RetroCAM: ${filename}`
+                    });
+
+                    console.log('✓ Photo shared successfully from preview');
+                    return 'shared';
+                }
+            } catch (error) {
+                if (error.name === 'AbortError') {
+                    console.log('Photo share dismissed by user');
+                    return 'cancelled';
+                }
+
+                console.error('Share failed from preview:', error);
+            }
+        }
+
+        this.downloadPhoto(photoEntry.data, filename);
+        return 'downloaded';
+    }
+
+    canUseNativeShare(file) {
+        if (!this.isMobileDevice() || typeof navigator.share !== 'function') {
+            return false;
+        }
+
+        if (typeof navigator.canShare !== 'function') {
+            return true;
+        }
+
+        try {
+            return navigator.canShare({ files: [file] });
+        } catch (error) {
+            console.warn('navigator.canShare check failed:', error);
+            return false;
+        }
+    }
+
+    isMobileDevice() {
+        const hasTouch = ('ontouchstart' in window) ||
+            (navigator.maxTouchPoints > 0) ||
+            (navigator.msMaxTouchPoints > 0);
+        const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+        return hasTouch || isMobileUA;
+    }
+
+    async createPhotoFile(dataURL, filename) {
+        const blob = await this.dataURLtoBlob(dataURL);
+        return new File([blob], filename, { type: 'image/jpeg' });
+    }
+
+    downloadPhoto(dataURL, filename) {
+        const link = document.createElement('a');
+        link.href = dataURL;
+        link.download = filename;
+
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+
+    async dataURLtoBlob(dataURL) {
+        const parts = dataURL.split(',');
+        const bstr = atob(parts[1]);
+        const n = bstr.length;
+        const u8arr = new Uint8Array(n);
+
+        for (let i = 0; i < n; i++) {
+            u8arr[i] = bstr.charCodeAt(i);
+        }
+
+        return new Blob([u8arr], { type: 'image/jpeg' });
     }
 }
 

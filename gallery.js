@@ -74,19 +74,8 @@ class Gallery {
         if (this.galleryArray.length === 0) return;
 
         const photo = this.galleryArray[this.currentIndex];
-        const link = document.createElement('a');
-
-        // Create filename from photo number
-        const filename = `PH${photo.number}.JPG`;
-
-        // Set download attributes
-        link.href = photo.data;
-        link.download = filename;
-
-        // Trigger download
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+        const filename = this.buildFilename(photo.number);
+        this.downloadPhoto(photo.data, filename);
 
         // Flash LED to indicate download
         this.flashLED();
@@ -96,35 +85,69 @@ class Gallery {
         if (this.galleryArray.length === 0) return;
 
         const photo = this.galleryArray[this.currentIndex];
-        const filename = `PH${photo.number}.JPG`;
+        const filename = this.buildFilename(photo.number);
 
-        // Check if Web Share API is available and on mobile
-        if (navigator.share && this.isMobileDevice()) {
+        if (this.isMobileDevice() && typeof navigator.share === 'function') {
             try {
-                // Convert data URL to Blob
-                const blob = await this.dataURLtoBlob(photo.data);
-                const file = new File([blob], filename, { type: 'image/jpeg' });
+                const file = await this.createPhotoFile(photo.data, filename);
 
-                // Use Web Share API
-                await navigator.share({
-                    files: [file],
-                    title: 'RetroCAM Photo',
-                    text: `Check out my photo from RetroCAM: ${filename}`
-                });
+                if (this.canUseNativeShare(file)) {
+                    await navigator.share({
+                        files: [file],
+                        title: 'RetroCAM Photo',
+                        text: `Check out my photo from RetroCAM: ${filename}`
+                    });
 
-                console.log('✓ Photo shared successfully');
-                this.flashLED();
+                    console.log('✓ Photo shared successfully');
+                    this.flashLED();
+                    return;
+                }
             } catch (error) {
                 if (error.name !== 'AbortError') {
                     console.error('Share failed:', error);
-                    // Fallback to download
                     this.downloadCurrentPhoto();
                 }
+                return;
             }
-        } else {
-            // Desktop or no Share API: use download
-            this.downloadCurrentPhoto();
         }
+
+        this.downloadCurrentPhoto();
+    }
+
+    buildFilename(photoNumber) {
+        return `PH${photoNumber}.JPG`;
+    }
+
+    canUseNativeShare(file) {
+        if (!this.isMobileDevice() || typeof navigator.share !== 'function') {
+            return false;
+        }
+
+        if (typeof navigator.canShare !== 'function') {
+            return true;
+        }
+
+        try {
+            return navigator.canShare({ files: [file] });
+        } catch (error) {
+            console.warn('navigator.canShare check failed:', error);
+            return false;
+        }
+    }
+
+    async createPhotoFile(dataURL, filename) {
+        const blob = await this.dataURLtoBlob(dataURL);
+        return new File([blob], filename, { type: 'image/jpeg' });
+    }
+
+    downloadPhoto(dataURL, filename) {
+        const link = document.createElement('a');
+        link.href = dataURL;
+        link.download = filename;
+
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
     }
 
     isMobileDevice() {
