@@ -8,6 +8,19 @@ class CameraCapture {
         this.video = null;
         this.canvas = null;
         this.ctx = null;
+        this.glCanvas = null;
+        this.sourceCanvas = null;
+        this.sourceCtx = null;
+        this.ccdFilter = null;
+        this.ccdParams = null;
+        this.scaleCCDParams = null;
+        this.scaledCCDParams = null;
+        this.ccdEnabled = true;
+        this.ccdIntensity = 1;
+        this.isFrontCamera = false;
+        this.isDocumentVisible = !document.hidden;
+        this.isCCDInitializing = false;
+        this.renderLoopId = null;
         this.stream = null;
         this.isStreaming = false;
         this.isInitializing = false;
@@ -15,6 +28,8 @@ class CameraCapture {
         this.batteryLevel = 85;
 
         this.initElements();
+        this.initEventListeners();
+        this.initCCDFilter();
         this.initCamera();
     }
 
@@ -30,8 +45,83 @@ class CameraCapture {
         this.canvas.width = isMobile ? 960 : 480;
         this.canvas.height = isMobile ? 720 : 360;
         this.ctx = this.canvas.getContext('2d');
+        this.canvas.classList.add('live-view-canvas');
+
+        this.sourceCanvas = document.createElement('canvas');
+        this.sourceCanvas.width = this.canvas.width;
+        this.sourceCanvas.height = this.canvas.height;
+        this.sourceCtx = this.sourceCanvas.getContext('2d', { alpha: false });
+
+        this.glCanvas = document.createElement('canvas');
+        this.glCanvas.width = this.canvas.width;
+        this.glCanvas.height = this.canvas.height;
+        this.glCanvas.style.display = 'none';
 
         document.body.appendChild(this.video);
+    }
+
+    initEventListeners() {
+        document.addEventListener('visibilitychange', () => {
+            this.isDocumentVisible = !document.hidden;
+
+            if (this.isDocumentVisible) {
+                if (this.isStreaming) {
+                    this.startLiveView();
+                }
+                return;
+            }
+
+            this.stopRenderLoop();
+        });
+
+        this.glCanvas.addEventListener('webglcontextlost', (event) => {
+            event.preventDefault();
+            console.warn('CCD filter context lost, falling back to raw camera frames');
+            this.ccdFilter = null;
+            this.scaledCCDParams = null;
+        });
+
+        this.glCanvas.addEventListener('webglcontextrestored', () => {
+            console.log('CCD filter context restored, reinitialising filter');
+            this.initCCDFilter();
+        });
+    }
+
+    async initCCDFilter() {
+        if (this.isCCDInitializing) {
+            return;
+        }
+
+        this.isCCDInitializing = true;
+
+        try {
+            const [
+                { ProCCDFilter },
+                { PARAMS, scaleParams }
+            ] = await Promise.all([
+                import('./filters/proccd/filter.js'),
+                import('./filters/proccd/params.js')
+            ]);
+
+            this.ccdParams = PARAMS;
+            this.scaleCCDParams = scaleParams;
+            this.scaledCCDParams = null;
+
+            const filter = new ProCCDFilter(this.glCanvas);
+            if ('downres_short_side' in PARAMS) {
+                filter.baseShort = PARAMS.downres_short_side;
+            }
+
+            filter.resize(this.canvas.width, this.canvas.height);
+            this.ccdFilter = filter;
+            console.log('CCD filter initialised');
+        } catch (error) {
+            console.error('Failed to initialise CCD filter:', error);
+            this.ccdFilter = null;
+            this.scaledCCDParams = null;
+        } finally {
+            this.isCCDInitializing = false;
+        }
     }
 
     async initCamera() {
@@ -40,6 +130,7 @@ class CameraCapture {
             // Use back camera on mobile, front camera on desktop
             const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
             const facingMode = isMobile ? 'environment' : 'user';
+            this.isFrontCamera = facingMode === 'user';
 
             this.stream = await navigator.mediaDevices.getUserMedia({
                 video: {
@@ -51,50 +142,57 @@ class CameraCapture {
             });
 
             this.video.srcObject = this.stream;
-            this.video.play();
-
-            this.video.onloadedmetadata = () => {
+            const handleStreamReady = () => {
                 this.isStreaming = true;
                 this.isInitializing = false;
+                this.syncCanvasSize();
                 this.startLiveView();
             };
+
+            await this.video.play();
+
+            if (this.video.readyState >= HTMLMediaElement.HAVE_METADATA) {
+                handleStreamReady();
+            } else {
+                this.video.onloadedmetadata = handleStreamReady;
+            }
         } catch (error) {
             console.error('Camera access error:', error);
             this.isInitializing = false;
             this.drawFallbackFrame();
+            this.startLiveView();
         }
     }
 
     startLiveView() {
         const liveViewContainer = document.querySelector('.live-view');
-        if (!liveViewContainer) return;
+        if (!liveViewContainer) {
+            return;
+        }
 
-        // Clear any previous image elements
-        liveViewContainer.innerHTML = '';
+        this.stopRenderLoop();
 
-        // Create a single img element to reuse
-        let liveViewImg = document.createElement('img');
-        liveViewImg.style.width = '100%';
-        liveViewImg.style.height = '100%';
-        liveViewImg.style.objectFit = 'cover';
-        liveViewContainer.appendChild(liveViewImg);
+        if (this.canvas.parentElement !== liveViewContainer) {
+            liveViewContainer.replaceChildren();
+            liveViewContainer.appendChild(this.canvas);
+        }
 
-        let frameCount = 0;
+        if (!this.isStreaming || !this.isDocumentVisible) {
+            return;
+        }
+
         const renderFrame = () => {
-            if (this.isStreaming) {
-                // Draw video frame to canvas
-                this.ctx.drawImage(this.video, 0, 0, this.canvas.width, this.canvas.height);
-
-                // Only update image every 2 frames to reduce flickering
-                if (frameCount % 2 === 0) {
-                    liveViewImg.src = this.canvas.toDataURL('image/jpeg');
-                }
-                frameCount++;
+            if (!this.isStreaming || !this.isDocumentVisible) {
+                this.renderLoopId = null;
+                return;
             }
-            requestAnimationFrame(renderFrame);
+
+            this.renderCameraFrame();
+            this.renderLoopId = requestAnimationFrame(renderFrame);
         };
 
-        renderFrame();
+        this.renderCameraFrame();
+        this.renderLoopId = requestAnimationFrame(renderFrame);
     }
 
     drawOverlay() {
@@ -118,33 +216,52 @@ class CameraCapture {
             this.ctx.fillText(text, x, y);
         };
 
+        const scale = Math.min(this.canvas.width / 480, this.canvas.height / 360);
+        const left = Math.round(8 * scale);
+        const top = Math.round(18 * scale);
+        const bottom = this.canvas.height - Math.round(12 * scale);
+        const right = this.canvas.width - Math.round(8 * scale);
+        const batteryX = this.canvas.width - Math.round(60 * scale);
+        const batteryY = this.canvas.height - Math.round(22 * scale);
+        const batteryTextX = this.canvas.width - Math.round(35 * scale);
+        const recordingX = this.canvas.width - Math.round(15 * scale);
+        const recordingY = this.canvas.height - Math.round(20 * scale);
+        const iconSize = Math.max(6, Math.round(8 * scale));
+        const timerValue = cameraUI?.timerDisplay?.textContent || (cameraUI ? cameraUI.getTimerValue() : '000000');
+        const storageValue = cameraUI?.storageDisplay?.textContent || '100M';
+        const timestamp = cameraUI?.timestampDisplay?.textContent || this.getOverlayTimestamp();
+
         // Top-Left: Timer display
         this.ctx.textAlign = 'left';
-        const timerValue = cameraUI ? cameraUI.getTimerValue() : '000000';
-        drawOutlinedText(timerValue, 8, 18, 'bold 14px monospace', '#ffffff');
+        drawOutlinedText(timerValue, left, top, `bold ${Math.max(14, Math.round(14 * scale))}px monospace`, '#ffffff');
 
         // Top-Right: Storage display
         this.ctx.textAlign = 'right';
-        drawOutlinedText('100M', 472, 18, 'bold 11px monospace', '#ffffff');
+        drawOutlinedText(storageValue, right, top, `bold ${Math.max(11, Math.round(11 * scale))}px monospace`, '#ffffff');
         this.ctx.textAlign = 'left';
 
         // Bottom-Left: Timestamp
-        const now = new Date();
-        const timestamp = this.formatTimestamp(now);
-        drawOutlinedText(timestamp, 8, 348, '10px monospace', '#ffffff');
+        drawOutlinedText(timestamp, left, bottom, `${Math.max(10, Math.round(10 * scale))}px monospace`, '#ffffff');
 
         // Bottom-Right: Battery indicator and recording dot
-        this.drawBatteryIcon(420, 338);
-        drawOutlinedText(this.batteryLevel.toFixed(0) + '%', 445, 348, '10px monospace', '#ffffff');
+        this.drawBatteryIcon(batteryX, batteryY, scale);
+        drawOutlinedText(
+            `${this.batteryLevel.toFixed(0)}%`,
+            batteryTextX,
+            bottom,
+            `${Math.max(10, Math.round(10 * scale))}px monospace`,
+            '#ffffff'
+        );
 
         // Recording indicator (red square)
         this.ctx.fillStyle = '#ff0000';
-        this.ctx.fillRect(465, 340, 8, 8);
+        this.ctx.fillRect(recordingX, recordingY, iconSize, iconSize);
     }
 
-    drawBatteryIcon(x, y) {
-        const width = 18;
-        const height = 8;
+    drawBatteryIcon(x, y, scale = 1) {
+        const width = Math.round(18 * scale);
+        const height = Math.max(6, Math.round(8 * scale));
+        const terminalWidth = Math.max(2, Math.round(2 * scale));
 
         // Battery outline in white
         this.ctx.strokeStyle = '#ffffff';
@@ -153,7 +270,7 @@ class CameraCapture {
 
         // Battery terminal
         this.ctx.fillStyle = '#ffffff';
-        this.ctx.fillRect(x + width, y + 2, 2, 4);
+        this.ctx.fillRect(x + width, y + Math.max(1, Math.round(2 * scale)), terminalWidth, Math.max(2, Math.round(4 * scale)));
 
         // Battery fill based on level - green to red gradient
         const fillWidth = (width - 2) * (this.batteryLevel / 100);
@@ -182,39 +299,28 @@ class CameraCapture {
     }
 
     capturePhoto() {
-        if (!this.isStreaming) {
-            console.error('Camera not streaming');
+        const rendered = this.renderCameraFrame();
+        if (!rendered) {
+            console.error('No camera frame available');
             return null;
         }
-
-        // Draw current frame
-        this.ctx.drawImage(this.video, 0, 0, this.canvas.width, this.canvas.height);
 
         // Draw Y2K camcorder overlay (timer, storage, timestamp, battery)
         this.drawOverlay();
 
-        // Draw capture effects (grain for Y2K aesthetic)
-        this.drawCaptureOverlay();
+        // Legacy capture grain disabled so ProCCD is the only image-processing effect.
+        // this.drawCaptureOverlay(this.isCCDActive());
 
         // Convert to base64
         return {
             data: this.canvas.toDataURL('image/jpeg'),
             number: String(this.photoCount).padStart(5, '0'),
-            timestamp: this.formatTimestamp(new Date())
+            timestamp: this.getOverlayTimestamp()
         };
     }
 
     drawCaptureOverlay() {
-        // Add subtle grain effect
-        const imageData = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
-        const data = imageData.data;
-        for (let i = 0; i < data.length; i += 4) {
-            const noise = Math.random() * 20 - 10;
-            data[i] += noise;
-            data[i + 1] += noise;
-            data[i + 2] += noise;
-        }
-        this.ctx.putImageData(imageData, 0, 0);
+        // Legacy capture grain disabled so ProCCD is the only image-processing effect.
     }
 
     incrementPhotoCount() {
@@ -224,6 +330,10 @@ class CameraCapture {
     decreaseBattery() {
         if (this.batteryLevel > 0) {
             this.batteryLevel -= 0.5;
+        }
+
+        if (cameraUI) {
+            cameraUI.updateBatteryDisplay(this.batteryLevel);
         }
     }
 
@@ -237,12 +347,189 @@ class CameraCapture {
         return `${year}/${month}/${day} ${hours}:${minutes}:${seconds}`;
     }
 
+    getOverlayTimestamp() {
+        return cameraUI?.timestampDisplay?.textContent || this.formatOverlayTimestamp(new Date());
+    }
+
+    formatOverlayTimestamp(date) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        const seconds = String(date.getSeconds()).padStart(2, '0');
+        return `${year} ${month} ${day} ${hours}:${minutes}:${seconds}`;
+    }
+
+    stopRenderLoop() {
+        if (this.renderLoopId !== null) {
+            cancelAnimationFrame(this.renderLoopId);
+            this.renderLoopId = null;
+        }
+    }
+
+    syncCanvasSize() {
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        const targetWidth = isMobile ? 960 : 480;
+        const targetHeight = isMobile ? 720 : 360;
+
+        if (this.canvas.width === targetWidth && this.canvas.height === targetHeight) {
+            this.syncCCDFilterSize();
+            return;
+        }
+
+        this.canvas.width = targetWidth;
+        this.canvas.height = targetHeight;
+        this.sourceCanvas.width = targetWidth;
+        this.sourceCanvas.height = targetHeight;
+        this.glCanvas.width = targetWidth;
+        this.glCanvas.height = targetHeight;
+        this.syncCCDFilterSize();
+    }
+
+    syncCCDFilterSize() {
+        if (!this.ccdFilter) {
+            return;
+        }
+
+        if (this.ccdParams && 'downres_short_side' in this.ccdParams) {
+            this.ccdFilter.baseShort = this.ccdParams.downres_short_side;
+        }
+
+        this.ccdFilter.resize(this.canvas.width, this.canvas.height);
+    }
+
+    updateSourceFrame() {
+        if (!this.video || this.video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+            return false;
+        }
+
+        const sourceWidth = this.video.videoWidth || this.canvas.width;
+        const sourceHeight = this.video.videoHeight || this.canvas.height;
+        const sourceAspect = sourceWidth / sourceHeight;
+        const targetAspect = this.sourceCanvas.width / this.sourceCanvas.height;
+
+        let sx = 0;
+        let sy = 0;
+        let sw = sourceWidth;
+        let sh = sourceHeight;
+
+        if (sourceAspect > targetAspect) {
+            sw = sourceHeight * targetAspect;
+            sx = (sourceWidth - sw) / 2;
+        } else if (sourceAspect < targetAspect) {
+            sh = sourceWidth / targetAspect;
+            sy = (sourceHeight - sh) / 2;
+        }
+
+        this.sourceCtx.clearRect(0, 0, this.sourceCanvas.width, this.sourceCanvas.height);
+        this.sourceCtx.drawImage(
+            this.video,
+            sx,
+            sy,
+            sw,
+            sh,
+            0,
+            0,
+            this.sourceCanvas.width,
+            this.sourceCanvas.height
+        );
+
+        return true;
+    }
+
+    drawOutputFrame(source, flipX = false) {
+        const width = this.canvas.width;
+        const height = this.canvas.height;
+
+        this.ctx.save();
+        this.ctx.clearRect(0, 0, width, height);
+        if (flipX) {
+            this.ctx.translate(width, 0);
+            this.ctx.scale(-1, 1);
+        }
+        this.ctx.drawImage(source, 0, 0, width, height);
+        this.ctx.restore();
+    }
+
+    getScaledCCDParams() {
+        if (!this.ccdParams || !this.scaleCCDParams) {
+            return null;
+        }
+
+        if (this.scaledCCDParams && this.scaledCCDParams.intensity === this.ccdIntensity) {
+            return this.scaledCCDParams.value;
+        }
+
+        const clampedIntensity = Math.max(0, Math.min(1.5, this.ccdIntensity));
+        this.ccdIntensity = clampedIntensity;
+        const value = this.scaleCCDParams(this.ccdParams, clampedIntensity);
+        this.scaledCCDParams = {
+            intensity: clampedIntensity,
+            value
+        };
+        return value;
+    }
+
+    isCCDActive() {
+        return Boolean(
+            this.ccdEnabled &&
+            this.ccdFilter &&
+            this.ccdParams &&
+            this.scaleCCDParams
+        );
+    }
+
+    renderCameraFrame() {
+        if (
+            !this.isStreaming ||
+            !this.video ||
+            this.video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA
+        ) {
+            return false;
+        }
+
+        if (!this.updateSourceFrame()) {
+            return false;
+        }
+
+        if (this.isCCDActive()) {
+            const params = this.getScaledCCDParams();
+
+            try {
+                this.syncCCDFilterSize();
+                this.ccdFilter.render(
+                    this.sourceCanvas,
+                    params,
+                    performance.now() / 1000,
+                    { flipX: this.isFrontCamera }
+                );
+                this.drawOutputFrame(this.glCanvas);
+                return true;
+            } catch (error) {
+                console.error('CCD render failed, falling back to raw camera frames:', error);
+                this.ccdFilter = null;
+                this.scaledCCDParams = null;
+            }
+        }
+
+        this.drawOutputFrame(this.sourceCanvas, this.isFrontCamera);
+        return true;
+    }
+
     stopStream() {
+        this.stopRenderLoop();
+
         if (this.stream) {
             this.stream.getTracks().forEach(track => track.stop());
-            this.isStreaming = false;
-            console.log('✓ Camera stream stopped');
         }
+
+        this.stream = null;
+        this.video.pause();
+        this.video.srcObject = null;
+        this.isStreaming = false;
+        this.isInitializing = false;
+        console.log('✓ Camera stream stopped');
     }
 
     async restartStream() {
