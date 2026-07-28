@@ -524,6 +524,8 @@ class CameraCapture {
             return false;
         }
 
+        let rendered = false;
+
         if (this.isCCDActive()) {
             const params = this.getScaledCCDParams();
 
@@ -536,8 +538,7 @@ class CameraCapture {
                     { flipX: this.isFrontCamera }
                 );
                 this.drawOutputFrame(this.glCanvas);
-                this.drawOverlay({ forceRecOn });
-                return true;
+                rendered = true;
             } catch (error) {
                 console.error('CCD render failed, falling back to raw camera frames:', error);
                 this.ccdFilter = null;
@@ -545,8 +546,20 @@ class CameraCapture {
             }
         }
 
-        this.drawOutputFrame(this.sourceCanvas, this.isFrontCamera);
-        this.drawOverlay({ forceRecOn });
+        if (!rendered) {
+            this.drawOutputFrame(this.sourceCanvas, this.isFrontCamera);
+        }
+
+        // Kept separate from the CCD try/catch above: an OSD drawing error must never
+        // be misattributed as a CCD failure (which would needlessly disable the WebGL
+        // filter), and must never escape uncaught here, or it silently kills the whole
+        // requestAnimationFrame loop, freezing the live view with no HUD.
+        try {
+            this.drawOverlay({ forceRecOn });
+        } catch (error) {
+            console.error('OSD overlay render failed:', error);
+        }
+
         return true;
     }
 
