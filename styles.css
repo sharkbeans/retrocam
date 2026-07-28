@@ -656,6 +656,14 @@ body {
 }
 
 /* ===== CAMERA UI OVERLAYS ===== */
+/* The OSD is now drawn directly onto the capture canvas (see capture.js
+   drawOverlay/renderOSD) so viewfinder and photo share one pixel-accurate
+   overlay. These DOM nodes stay for their data (camera-ui.js still writes
+   .timer-value/.timestamp-value/etc, which drawOverlay reads), just hidden. */
+#ui-camera .camera-ui-overlay {
+    display: none;
+}
+
 .camera-ui-overlay {
     position: absolute;
     font-family: 'Courier New', monospace;
@@ -729,7 +737,10 @@ body {
         opacity: 1;
     }
     100% {
-        transform: translate(calc(-50% + 110px), calc(-50% - 110px)) scale(0.25);
+        transform: translate(
+            calc(-50% + var(--capture-end-x, 110px)),
+            calc(-50% + var(--capture-end-y, -110px))
+        ) scale(0.25);
         opacity: 0.8;
     }
 }

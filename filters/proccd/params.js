@@ -3,8 +3,8 @@
 // Every value here maps to a uniform in the WebGL shaders (see filter.js).
 export const PARAMS = {
   // 1. low-res softening: render into a short-side=480 buffer, then blow back up
-  downres_short_side: 560,
-  softness: 0.35,
+  downres_short_side: 420,
+  softness: 0.70,
 
   // 2. split-tone: RGB nudges pushed into shadows / highlights
   shadow_tint: [-0.04, 0.01, 0.09],
@@ -14,28 +14,37 @@ export const PARAMS = {
   tone_falloff: 1.4,
 
   // 3. contrast + color
-  contrast: 0.16,
+  contrast: 0.20,
   black_point: 0.0,
   lift: 0.05,
-  saturation: 1.12,
+  saturation: 1.18,
 
   // 4. highlight bloom / halation
   bloom_threshold: 0.72,
   bloom_radius: 14,
-  bloom_strength: 0.55,
+  bloom_strength: 0.62,
 
   // 5. chromatic aberration (radial channel separation)
-  ca_amount: 0.004,
+  ca_amount: 0.0065,
 
   // 6. chroma noise (cheap-sensor colored speckle)
-  noise_sigma: 0.045,
+  noise_sigma: 0.060,
   noise_scale: 2,
   noise_shadow_bias: 1.3,
 
   // 7. vignette
-  vignette_strength: 0.35,
+  vignette_strength: 0.42,
 
-  // 8. date/time stamp (drawn on the 2D compositor, not in GL)
+  // 8. vertical smear (CCD readout bleed on bright highlights)
+  smear_strength: 0.12,
+
+  // 9. chroma subsampling (early-JPEG chroma blur, luma stays sharp)
+  chroma_bleed: 0.0035,
+
+  // 10. posterize + dither (banded gradients from a low-bit-depth encoder)
+  posterize_levels: 42,
+
+  // 11. date/time stamp (drawn on the 2D compositor, not in GL)
   stamp_color: [255, 150, 40],
   stamp_scale: 0.038
 };
@@ -56,5 +65,8 @@ export function scaleParams(p, k) {
   s.ca_amount = lerp(0, p.ca_amount, k);
   s.noise_sigma = lerp(0, p.noise_sigma, k);
   s.vignette_strength = lerp(0, p.vignette_strength, k);
+  s.smear_strength = lerp(0, p.smear_strength, k);
+  s.chroma_bleed = lerp(0, p.chroma_bleed, k);
+  s.posterize_levels = lerp(255, p.posterize_levels, k);
   return s;
 }

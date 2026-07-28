@@ -26,6 +26,9 @@ class CameraCapture {
         this.isInitializing = false;
         this.photoCount = 0;
         this.batteryLevel = 85;
+        this.osdCanvas = null;
+        this.osdCtx = null;
+        this.osdCacheKey = null;
 
         this.initElements();
         this.initEventListeners();
@@ -56,6 +59,11 @@ class CameraCapture {
         this.glCanvas.width = this.canvas.width;
         this.glCanvas.height = this.canvas.height;
         this.glCanvas.style.display = 'none';
+
+        this.osdCanvas = document.createElement('canvas');
+        this.osdCanvas.width = this.canvas.width;
+        this.osdCanvas.height = this.canvas.height;
+        this.osdCtx = this.osdCanvas.getContext('2d');
 
         document.body.appendChild(this.video);
     }
@@ -195,93 +203,110 @@ class CameraCapture {
         this.renderLoopId = requestAnimationFrame(renderFrame);
     }
 
-    drawOverlay() {
-        // Helper function to draw text with black outline effect (Y2K style)
-        const drawOutlinedText = (text, x, y, font, color) => {
-            this.ctx.font = font;
-            this.ctx.fillStyle = '#000000';
+    drawOverlay({ forceRecOn = false } = {}) {
+        const W = this.canvas.width;
+        const H = this.canvas.height;
 
-            // Draw black outline at various offsets
-            const offsets = [
-                [-1, -1], [1, -1], [-1, 1], [1, 1],
-                [-2, 0], [2, 0], [0, -2], [0, 2]
-            ];
+        if (this.osdCanvas.width !== W || this.osdCanvas.height !== H) {
+            this.osdCanvas.width = W;
+            this.osdCanvas.height = H;
+            this.osdCacheKey = null;
+        }
 
-            offsets.forEach(([ox, oy]) => {
-                this.ctx.fillText(text, x + ox, y + oy);
-            });
-
-            // Draw white text on top
-            this.ctx.fillStyle = color;
-            this.ctx.fillText(text, x, y);
-        };
-
-        const scale = Math.min(this.canvas.width / 480, this.canvas.height / 360);
-        const left = Math.round(8 * scale);
-        const top = Math.round(18 * scale);
-        const bottom = this.canvas.height - Math.round(12 * scale);
-        const right = this.canvas.width - Math.round(8 * scale);
-        const batteryX = this.canvas.width - Math.round(60 * scale);
-        const batteryY = this.canvas.height - Math.round(22 * scale);
-        const batteryTextX = this.canvas.width - Math.round(35 * scale);
-        const recordingX = this.canvas.width - Math.round(15 * scale);
-        const recordingY = this.canvas.height - Math.round(20 * scale);
-        const iconSize = Math.max(6, Math.round(8 * scale));
         const timerValue = cameraUI?.timerDisplay?.textContent || (cameraUI ? cameraUI.getTimerValue() : '000000');
         const storageValue = cameraUI?.storageDisplay?.textContent || '100M';
         const timestamp = cameraUI?.timestampDisplay?.textContent || this.getOverlayTimestamp();
+        const batteryText = `${this.batteryLevel.toFixed(0)}%`;
+        const recOn = forceRecOn || (Math.floor(performance.now() / 600) % 2 === 0);
 
-        // Top-Left: Timer display
-        this.ctx.textAlign = 'left';
-        drawOutlinedText(timerValue, left, top, `bold ${Math.max(14, Math.round(14 * scale))}px monospace`, '#ffffff');
+        const cacheKey = `${timerValue}|${storageValue}|${timestamp}|${batteryText}|${recOn}|${W}|${H}`;
+        if (cacheKey !== this.osdCacheKey) {
+            this.renderOSD(this.osdCtx, W, H, {
+                timerValue, storageValue, timestamp, batteryText, recOn
+            });
+            this.osdCacheKey = cacheKey;
+        }
 
-        // Top-Right: Storage display
-        this.ctx.textAlign = 'right';
-        drawOutlinedText(storageValue, right, top, `bold ${Math.max(11, Math.round(11 * scale))}px monospace`, '#ffffff');
-        this.ctx.textAlign = 'left';
-
-        // Bottom-Left: Timestamp
-        drawOutlinedText(timestamp, left, bottom, `${Math.max(10, Math.round(10 * scale))}px monospace`, '#ffffff');
-
-        // Bottom-Right: Battery indicator and recording dot
-        this.drawBatteryIcon(batteryX, batteryY, scale);
-        drawOutlinedText(
-            `${this.batteryLevel.toFixed(0)}%`,
-            batteryTextX,
-            bottom,
-            `${Math.max(10, Math.round(10 * scale))}px monospace`,
-            '#ffffff'
-        );
-
-        // Recording indicator (red square)
-        this.ctx.fillStyle = '#ff0000';
-        this.ctx.fillRect(recordingX, recordingY, iconSize, iconSize);
+        this.ctx.drawImage(this.osdCanvas, 0, 0);
     }
 
-    drawBatteryIcon(x, y, scale = 1) {
-        const width = Math.round(18 * scale);
-        const height = Math.max(6, Math.round(8 * scale));
-        const terminalWidth = Math.max(2, Math.round(2 * scale));
+    renderOSD(ctx, W, H, { timerValue, storageValue, timestamp, batteryText, recOn }) {
+        ctx.clearRect(0, 0, W, H);
 
-        // Battery outline in white
-        this.ctx.strokeStyle = '#ffffff';
-        this.ctx.lineWidth = 1;
-        this.ctx.strokeRect(x, y, width, height);
+        const unit = Math.max(2, Math.round(H / 150));
+        const margin = 4 * unit;
+        const stampColor = this.ccdParams && this.ccdParams.stamp_color
+            ? `rgb(${this.ccdParams.stamp_color[0]}, ${this.ccdParams.stamp_color[1]}, ${this.ccdParams.stamp_color[2]})`
+            : 'rgb(255, 150, 40)';
 
-        // Battery terminal
-        this.ctx.fillStyle = '#ffffff';
-        this.ctx.fillRect(x + width, y + Math.max(1, Math.round(2 * scale)), terminalWidth, Math.max(2, Math.round(4 * scale)));
+        // Top-Left: Timer
+        window.PixelFont.draw(ctx, timerValue, margin, margin, {
+            unit, color: '#ffffff', align: 'left', baseline: 'top'
+        });
 
-        // Battery fill based on level - green to red gradient
-        const fillWidth = (width - 2) * (this.batteryLevel / 100);
-        if (this.batteryLevel > 50) {
-            this.ctx.fillStyle = '#00ff00';
-        } else if (this.batteryLevel > 20) {
-            this.ctx.fillStyle = '#ffff00';
-        } else {
-            this.ctx.fillStyle = '#ff0000';
+        // Top-Right: Storage
+        window.PixelFont.draw(ctx, storageValue, W - margin, margin, {
+            unit, color: '#ffffff', align: 'right', baseline: 'top'
+        });
+
+        // Bottom-Left: Timestamp (amber, with glow)
+        window.PixelFont.draw(ctx, timestamp, margin, H - margin, {
+            unit, color: stampColor, align: 'left', baseline: 'bottom', glow: true
+        });
+
+        // Bottom-Right cluster: [REC dot] [battery icon] [battery %], bottom-aligned
+        const rowBottom = H - margin;
+        const gap = 2 * unit;
+
+        let cursorRight = W - margin;
+        const textW = window.PixelFont.draw(ctx, batteryText, cursorRight, rowBottom, {
+            unit, color: '#ffffff', align: 'right', baseline: 'bottom'
+        });
+        cursorRight -= textW + gap;
+
+        const iconW = 9 * unit;
+        const iconH = 5 * unit;
+        const iconX = cursorRight - iconW;
+        const iconY = rowBottom - iconH;
+        this.drawBatteryIcon(ctx, iconX, iconY, unit);
+        cursorRight -= iconW + gap;
+
+        if (recOn) {
+            const dotSize = iconH;
+            const dotX = cursorRight - dotSize;
+            const dotY = rowBottom - dotSize;
+            ctx.fillStyle = '#ff0000';
+            ctx.fillRect(dotX, dotY, dotSize, dotSize);
         }
-        this.ctx.fillRect(x + 1, y + 1, fillWidth, height - 2);
+    }
+
+    drawBatteryIcon(ctx, x, y, unit) {
+        const bodyW = 8 * unit;
+        const bodyH = 5 * unit;
+        const terminalW = unit;
+        const terminalH = 3 * unit;
+
+        // Outline (1-cell-thick, pixel-snapped)
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(x, y, bodyW, unit);
+        ctx.fillRect(x, y + bodyH - unit, bodyW, unit);
+        ctx.fillRect(x, y, unit, bodyH);
+        ctx.fillRect(x + bodyW - unit, y, unit, bodyH);
+
+        // Terminal nub
+        ctx.fillRect(x + bodyW, y + (bodyH - terminalH) / 2, terminalW, terminalH);
+
+        // Fill based on level, quantised to the unit grid
+        if (this.batteryLevel > 50) {
+            ctx.fillStyle = '#00ff00';
+        } else if (this.batteryLevel > 20) {
+            ctx.fillStyle = '#ffff00';
+        } else {
+            ctx.fillStyle = '#ff0000';
+        }
+        const innerW = bodyW - 2 * unit;
+        const fillCells = Math.round((innerW / unit) * (this.batteryLevel / 100));
+        ctx.fillRect(x + unit, y + unit, fillCells * unit, bodyH - 2 * unit);
     }
 
     drawFallbackFrame() {
@@ -292,28 +317,31 @@ class CameraCapture {
         this.ctx.fillStyle = gradient;
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
-        this.ctx.fillStyle = '#4db8ff';
-        this.ctx.font = 'bold 14px monospace';
-        this.ctx.textAlign = 'center';
-        this.ctx.fillText('CAMERA NOT AVAILABLE', this.canvas.width / 2, this.canvas.height / 2);
+        const unit = Math.max(2, Math.round(this.canvas.height / 150));
+        const text = 'CAMERA NOT AVAILABLE';
+        const w = window.PixelFont.measure(text, unit);
+        window.PixelFont.draw(
+            this.ctx,
+            text,
+            (this.canvas.width - w) / 2,
+            (this.canvas.height - window.PixelFont.height(unit)) / 2,
+            { unit, color: '#4db8ff', align: 'left', baseline: 'top' }
+        );
     }
 
     capturePhoto() {
-        const rendered = this.renderCameraFrame();
+        const rendered = this.renderCameraFrame({ forceRecOn: true });
         if (!rendered) {
             console.error('No camera frame available');
             return null;
         }
 
-        // Draw Y2K camcorder overlay (timer, storage, timestamp, battery)
-        this.drawOverlay();
-
         // Legacy capture grain disabled so ProCCD is the only image-processing effect.
         // this.drawCaptureOverlay(this.isCCDActive());
 
-        // Convert to base64
+        // Convert to base64 - low quality JPEG for authentic block/ring artifacts
         return {
-            data: this.canvas.toDataURL('image/jpeg'),
+            data: this.canvas.toDataURL('image/jpeg', 0.70),
             number: String(this.photoCount).padStart(5, '0'),
             timestamp: this.getOverlayTimestamp()
         };
@@ -384,6 +412,9 @@ class CameraCapture {
         this.sourceCanvas.height = targetHeight;
         this.glCanvas.width = targetWidth;
         this.glCanvas.height = targetHeight;
+        this.osdCanvas.width = targetWidth;
+        this.osdCanvas.height = targetHeight;
+        this.osdCacheKey = null;
         this.syncCCDFilterSize();
     }
 
@@ -480,7 +511,7 @@ class CameraCapture {
         );
     }
 
-    renderCameraFrame() {
+    renderCameraFrame({ forceRecOn = false } = {}) {
         if (
             !this.isStreaming ||
             !this.video ||
@@ -505,6 +536,7 @@ class CameraCapture {
                     { flipX: this.isFrontCamera }
                 );
                 this.drawOutputFrame(this.glCanvas);
+                this.drawOverlay({ forceRecOn });
                 return true;
             } catch (error) {
                 console.error('CCD render failed, falling back to raw camera frames:', error);
@@ -514,6 +546,7 @@ class CameraCapture {
         }
 
         this.drawOutputFrame(this.sourceCanvas, this.isFrontCamera);
+        this.drawOverlay({ forceRecOn });
         return true;
     }
 
@@ -549,11 +582,24 @@ class CameraCapture {
         thumbnail.className = 'capture-thumbnail';
 
         const cameraFrame = document.querySelector('.camera-frame');
-        if (cameraFrame) {
-            cameraFrame.appendChild(thumbnail);
-        } else {
-            document.body.appendChild(thumbnail);
-        }
+        const container = cameraFrame || document.body;
+        container.appendChild(thumbnail);
+
+        // The end state is a fixed scale (0.25, set in the CSS keyframe) but the
+        // translate distance to actually land in the corner depends on the frame's
+        // rendered size, which differs a lot between desktop and fullscreen mobile.
+        // Compute it here instead of hardcoding a single px offset in the keyframe.
+        const frameW = container.clientWidth;
+        const frameH = container.clientHeight;
+        const endScale = 0.25;
+        const margin = 16;
+        const endW = thumbnail.offsetWidth * endScale;
+        const endH = thumbnail.offsetHeight * endScale;
+        const dx = (frameW - margin - endW / 2) - frameW / 2;
+        const dy = (margin + endH / 2) - frameH / 2;
+
+        thumbnail.style.setProperty('--capture-end-x', `${dx}px`);
+        thumbnail.style.setProperty('--capture-end-y', `${dy}px`);
 
         // Remove the element after animation completes
         setTimeout(() => {

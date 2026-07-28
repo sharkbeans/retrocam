@@ -120,6 +120,9 @@ uniform float u_noiseSigma, u_noiseBias, u_coarse;
 uniform vec2 u_res;
 uniform float u_time;
 uniform float u_vig;
+uniform float u_smear;         // vertical readout-smear strength
+uniform float u_chromaBleed;   // horizontal chroma-subsampling radius (uv)
+uniform float u_levels;        // posterize levels (>=2)
 ${LUMA}
 float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float vnoise(vec2 p){
@@ -133,6 +136,25 @@ void main(){
   vec3 c = texture2D(u_tex, v_uv).rgb;
   vec3 bl = texture2D(u_bloom, v_uv).rgb;
   c = 1.0 - (1.0 - c) * (1.0 - bl * u_bloomStr);      // screen blend
+
+  // vertical smear — CCD readout bleed: bright highlights streak down/up the
+  // column they sit in. Reuses the already-blurred bloom buffer as the source.
+  vec3 smear = vec3(0.0);
+  const int TAPS = 6;
+  for (int i = -TAPS; i <= TAPS; i++){
+    float fi = float(i);
+    vec2 uv = v_uv + vec2(0.0, fi * 0.045 / float(TAPS));
+    smear += texture2D(u_bloom, uv).rgb;
+  }
+  smear /= float(TAPS * 2 + 1);
+  c += smear * u_smear * vec3(0.85, 0.95, 1.0);
+
+  // chroma subsampling — early JPEG kept luma sharp but threw away colour
+  // resolution; blur chroma only, keep luma from the centre sample.
+  vec3 chromaL = texture2D(u_tex, v_uv - vec2(u_chromaBleed, 0.0)).rgb;
+  vec3 chromaR = texture2D(u_tex, v_uv + vec2(u_chromaBleed, 0.0)).rgb;
+  vec3 chromaAvg = (chromaL + c + chromaR) / 3.0;
+  c = c + (chromaAvg - luma(chromaAvg) - (c - luma(c)));
 
   // fine chroma grain — matches proccd.py: ~half-res, gaussian-ish, shadow-biased,
   // re-seeded by time so it shimmers frame-to-frame like a real CCD.
@@ -148,6 +170,13 @@ void main(){
   vec2 d = (v_uv - 0.5) * 2.0;
   float dist = length(d) / 1.41421356;
   c *= 1.0 - u_vig * pow(clamp(dist, 0.0, 1.0), 2.2);
+
+  c = clamp(c, 0.0, 1.0);
+
+  // posterize + ordered dither — banded gradients like a cheap sensor + low
+  // bit-depth encoder. Dither breaks up hard bands into a fine, film-like grain.
+  float dither = (hash(gl_FragCoord.xy + u_time * 60.0) - 0.5) / u_levels;
+  c = floor(c * u_levels + dither * u_levels + 0.5) / u_levels;
 
   gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
 }
@@ -352,6 +381,9 @@ export class ProCCDFilter {
     gl.uniform2f(loc(gl, this.pComp, 'u_res'), this.W, this.H);
     gl.uniform1f(loc(gl, this.pComp, 'u_time'), t);
     gl.uniform1f(loc(gl, this.pComp, 'u_vig'), p.vignette_strength);
+    gl.uniform1f(loc(gl, this.pComp, 'u_smear'), p.smear_strength);
+    gl.uniform1f(loc(gl, this.pComp, 'u_chromaBleed'), p.chroma_bleed);
+    gl.uniform1f(loc(gl, this.pComp, 'u_levels'), Math.max(2, p.posterize_levels));
     this._drawQuad(this.pComp);
   }
 }
