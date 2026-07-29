@@ -192,7 +192,7 @@ class Camera {
             // Auto-save to gallery
             console.log('Attempting to save photo...', photoPreview ? 'photoPreview exists' : 'photoPreview is undefined');
             if (photoPreview) {
-                photoPreview.autoSavePhoto(photoData.data, photoData.number, photoData.timestamp);
+                photoPreview.autoSavePhoto(photoData.data, photoData.number, photoData.timestamp, photoData.overlay);
                 console.log('✓ Photo auto-saved to gallery');
             } else {
                 console.warn('⚠ photoPreview not available, cannot auto-save');

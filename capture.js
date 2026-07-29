@@ -28,11 +28,15 @@ class CameraCapture {
         this.batteryLevel = 85;
         this.osdCanvas = null;
         this.osdCtx = null;
+        this.liveOsdCanvas = null;
+        this.liveOsdCtx = null;
         this.osdCacheKey = null;
+        this.osdFontFamily = '"Share Tech Mono", "Courier New", monospace';
 
         this.initElements();
         this.initEventListeners();
         this.initCCDFilter();
+        this.initOSDFont();
         this.initCamera();
     }
 
@@ -65,7 +69,29 @@ class CameraCapture {
         this.osdCanvas.height = this.canvas.height;
         this.osdCtx = this.osdCanvas.getContext('2d');
 
+        this.liveOsdCanvas = document.createElement('canvas');
+        this.liveOsdCanvas.width = this.canvas.width;
+        this.liveOsdCanvas.height = this.canvas.height;
+        this.liveOsdCanvas.classList.add('osd-layer');
+        this.liveOsdCtx = this.liveOsdCanvas.getContext('2d');
+
         document.body.appendChild(this.video);
+    }
+
+    initOSDFont() {
+        if (!document.fonts || !document.fonts.load) {
+            return;
+        }
+
+        document.fonts.load(`600 24px ${this.osdFontFamily}`).then(() => {
+            this.osdCacheKey = null;
+            if (this.isStreaming) {
+                this.renderCameraFrame();
+            }
+            if (gallery && typeof gallery.updateDisplay === 'function') {
+                gallery.updateDisplay();
+            }
+        }).catch(() => {});
     }
 
     initEventListeners() {
@@ -183,6 +209,7 @@ class CameraCapture {
         if (this.canvas.parentElement !== liveViewContainer) {
             liveViewContainer.replaceChildren();
             liveViewContainer.appendChild(this.canvas);
+            liveViewContainer.appendChild(this.liveOsdCanvas);
         }
 
         if (!this.isStreaming || !this.isDocumentVisible) {
@@ -203,7 +230,26 @@ class CameraCapture {
         this.renderLoopId = requestAnimationFrame(renderFrame);
     }
 
-    drawOverlay({ forceRecOn = false } = {}) {
+    buildOSDState({
+        forceRecOn = false,
+        timerValue,
+        storageValue,
+        timestamp,
+        batteryText,
+        batteryLevel,
+        recOn
+    } = {}) {
+        return {
+            timerValue: timerValue || cameraUI?.timerDisplay?.textContent || (cameraUI ? cameraUI.getTimerValue() : '000000'),
+            storageValue: storageValue || cameraUI?.storageDisplay?.textContent || '100M',
+            timestamp: timestamp || cameraUI?.timestampDisplay?.textContent || this.getOverlayTimestamp(),
+            batteryText: batteryText || `${Math.round(this.batteryLevel)}%`,
+            batteryLevel: typeof batteryLevel === 'number' ? batteryLevel : this.batteryLevel,
+            recOn: typeof recOn === 'boolean' ? recOn : (forceRecOn || (Math.floor(performance.now() / 600) % 2 === 0))
+        };
+    }
+
+    ensureOverlayCache(state) {
         const W = this.canvas.width;
         const H = this.canvas.height;
 
@@ -213,62 +259,97 @@ class CameraCapture {
             this.osdCacheKey = null;
         }
 
-        const timerValue = cameraUI?.timerDisplay?.textContent || (cameraUI ? cameraUI.getTimerValue() : '000000');
-        const storageValue = cameraUI?.storageDisplay?.textContent || '100M';
-        const timestamp = cameraUI?.timestampDisplay?.textContent || this.getOverlayTimestamp();
-        const batteryText = `${this.batteryLevel.toFixed(0)}%`;
-        const recOn = forceRecOn || (Math.floor(performance.now() / 600) % 2 === 0);
-
-        const cacheKey = `${timerValue}|${storageValue}|${timestamp}|${batteryText}|${recOn}|${W}|${H}`;
+        const cacheKey = `${state.timerValue}|${state.storageValue}|${state.timestamp}|${state.batteryText}|${state.recOn}|${W}|${H}`;
         if (cacheKey !== this.osdCacheKey) {
-            this.renderOSD(this.osdCtx, W, H, {
-                timerValue, storageValue, timestamp, batteryText, recOn
-            });
+            this.renderOSD(this.osdCtx, W, H, state);
             this.osdCacheKey = cacheKey;
         }
+    }
 
+    drawOverlay({ forceRecOn = false } = {}) {
+        const state = this.buildOSDState({ forceRecOn });
+        this.ensureOverlayCache(state);
         this.ctx.drawImage(this.osdCanvas, 0, 0);
     }
 
-    renderOSD(ctx, W, H, { timerValue, storageValue, timestamp, batteryText, recOn }) {
+    drawLiveOverlay({ forceRecOn = false } = {}) {
+        if (!this.liveOsdCtx) {
+            return;
+        }
+
+        const W = this.canvas.width;
+        const H = this.canvas.height;
+        if (this.liveOsdCanvas.width !== W || this.liveOsdCanvas.height !== H) {
+            this.liveOsdCanvas.width = W;
+            this.liveOsdCanvas.height = H;
+        }
+
+        const state = this.buildOSDState({ forceRecOn });
+        this.ensureOverlayCache(state);
+
+        this.liveOsdCtx.clearRect(0, 0, W, H);
+        this.liveOsdCtx.drawImage(this.osdCanvas, 0, 0);
+    }
+
+    renderOSD(ctx, W, H, { timerValue, storageValue, timestamp, batteryText, batteryLevel, recOn }) {
         ctx.clearRect(0, 0, W, H);
 
-        const unit = Math.max(2, Math.round(H / 150));
-        const margin = 4 * unit;
+        const scale = H / 360;
+        const margin = Math.max(8, Math.round(10 * scale));
         const stampColor = this.ccdParams && this.ccdParams.stamp_color
             ? `rgb(${this.ccdParams.stamp_color[0]}, ${this.ccdParams.stamp_color[1]}, ${this.ccdParams.stamp_color[2]})`
             : 'rgb(255, 150, 40)';
 
-        // Top-Left: Timer
-        window.PixelFont.draw(ctx, timerValue, margin, margin, {
-            unit, color: '#ffffff', align: 'left', baseline: 'top'
-        });
-
-        // Top-Right: Storage
-        window.PixelFont.draw(ctx, storageValue, W - margin, margin, {
-            unit, color: '#ffffff', align: 'right', baseline: 'top'
-        });
-
-        // Bottom-Left: Timestamp (amber, with glow)
-        window.PixelFont.draw(ctx, timestamp, margin, H - margin, {
-            unit, color: stampColor, align: 'left', baseline: 'bottom', glow: true
-        });
-
-        // Bottom-Right cluster: [REC dot] [battery icon] [battery %], bottom-aligned
+        const timerSize = Math.max(14, Math.round(16 * scale));
+        const storageSize = Math.max(12, Math.round(14 * scale));
+        const stampSize = Math.max(11, Math.round(13 * scale));
+        const batterySize = Math.max(12, Math.round(14 * scale));
         const rowBottom = H - margin;
-        const gap = 2 * unit;
+        const gap = Math.max(5, Math.round(6 * scale));
+
+        this.drawOSDText(ctx, timerValue, margin, margin, {
+            fontSize: timerSize,
+            color: '#f4f7fb',
+            align: 'left',
+            baseline: 'top'
+        });
+
+        this.drawOSDText(ctx, storageValue, W - margin, margin, {
+            fontSize: storageSize,
+            color: '#f4f7fb',
+            align: 'right',
+            baseline: 'top'
+        });
+
+        this.drawOSDText(ctx, timestamp, margin, rowBottom, {
+            fontSize: stampSize,
+            color: stampColor,
+            align: 'left',
+            baseline: 'bottom',
+            glow: true
+        });
 
         let cursorRight = W - margin;
-        const textW = window.PixelFont.draw(ctx, batteryText, cursorRight, rowBottom, {
-            unit, color: '#ffffff', align: 'right', baseline: 'bottom'
+        const batteryMetrics = this.drawOSDText(ctx, batteryText, cursorRight, rowBottom, {
+            fontSize: batterySize,
+            color: '#f4f7fb',
+            align: 'right',
+            baseline: 'bottom',
+            measureOnly: true
         });
-        cursorRight -= textW + gap;
+        this.drawOSDText(ctx, batteryText, cursorRight, rowBottom, {
+            fontSize: batterySize,
+            color: '#f4f7fb',
+            align: 'right',
+            baseline: 'bottom'
+        });
+        cursorRight -= batteryMetrics.width + gap;
 
-        const iconW = 9 * unit;
-        const iconH = 5 * unit;
+        const iconW = Math.max(18, Math.round(24 * scale));
+        const iconH = Math.max(10, Math.round(14 * scale));
         const iconX = cursorRight - iconW;
         const iconY = rowBottom - iconH;
-        this.drawBatteryIcon(ctx, iconX, iconY, unit);
+        this.drawBatteryIcon(ctx, iconX, iconY, iconW, iconH, batteryLevel);
         cursorRight -= iconW + gap;
 
         if (recOn) {
@@ -280,33 +361,72 @@ class CameraCapture {
         }
     }
 
-    drawBatteryIcon(ctx, x, y, unit) {
-        const bodyW = 8 * unit;
-        const bodyH = 5 * unit;
-        const terminalW = unit;
-        const terminalH = 3 * unit;
+    drawOSDText(ctx, text, x, y, {
+        fontSize,
+        color,
+        align = 'left',
+        baseline = 'alphabetic',
+        glow = false,
+        measureOnly = false
+    }) {
+        ctx.save();
+        ctx.font = `600 ${fontSize}px ${this.osdFontFamily}`;
+        ctx.textAlign = align;
+        ctx.textBaseline = baseline;
+        const metrics = ctx.measureText(text);
 
-        // Outline (1-cell-thick, pixel-snapped)
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(x, y, bodyW, unit);
-        ctx.fillRect(x, y + bodyH - unit, bodyW, unit);
-        ctx.fillRect(x, y, unit, bodyH);
-        ctx.fillRect(x + bodyW - unit, y, unit, bodyH);
+        if (measureOnly) {
+            ctx.restore();
+            return metrics;
+        }
 
-        // Terminal nub
-        ctx.fillRect(x + bodyW, y + (bodyH - terminalH) / 2, terminalW, terminalH);
+        ctx.lineJoin = 'round';
+        ctx.lineWidth = Math.max(2, Math.round(fontSize * 0.18));
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.95)';
+        ctx.shadowColor = glow ? 'rgba(255, 160, 72, 0.35)' : 'rgba(0, 0, 0, 0.45)';
+        ctx.shadowBlur = glow ? Math.max(4, Math.round(fontSize * 0.35)) : Math.max(1, Math.round(fontSize * 0.12));
+        ctx.strokeText(text, x, y);
 
-        // Fill based on level, quantised to the unit grid
-        if (this.batteryLevel > 50) {
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = color;
+        ctx.fillText(text, x, y);
+        ctx.restore();
+
+        return metrics;
+    }
+
+    drawBatteryIcon(ctx, x, y, width, height, batteryLevel = this.batteryLevel) {
+        const strokeWidth = Math.max(2, Math.round(height * 0.14));
+        const terminalW = Math.max(3, Math.round(width * 0.12));
+        const terminalH = Math.max(4, Math.round(height * 0.45));
+        const bodyW = width - terminalW - strokeWidth;
+
+        ctx.save();
+        ctx.lineWidth = strokeWidth;
+        ctx.strokeStyle = '#f4f7fb';
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
+        ctx.shadowBlur = Math.max(1, Math.round(height * 0.1));
+        ctx.strokeRect(x, y, bodyW, height);
+        ctx.strokeRect(x + bodyW, y + (height - terminalH) / 2, terminalW, terminalH);
+
+        if (batteryLevel > 50) {
             ctx.fillStyle = '#00ff00';
-        } else if (this.batteryLevel > 20) {
+        } else if (batteryLevel > 20) {
             ctx.fillStyle = '#ffff00';
         } else {
             ctx.fillStyle = '#ff0000';
         }
-        const innerW = bodyW - 2 * unit;
-        const fillCells = Math.round((innerW / unit) * (this.batteryLevel / 100));
-        ctx.fillRect(x + unit, y + unit, fillCells * unit, bodyH - 2 * unit);
+        ctx.shadowBlur = 0;
+        const innerPad = strokeWidth;
+        const innerW = Math.max(0, bodyW - innerPad * 2);
+        const fillW = innerW * (batteryLevel / 100);
+        ctx.fillRect(
+            x + innerPad,
+            y + innerPad,
+            fillW,
+            Math.max(1, height - innerPad * 2)
+        );
+        ctx.restore();
     }
 
     drawFallbackFrame() {
@@ -330,20 +450,26 @@ class CameraCapture {
     }
 
     capturePhoto() {
-        const rendered = this.renderCameraFrame({ forceRecOn: true });
+        const rendered = this.renderCameraFrame();
         if (!rendered) {
             console.error('No camera frame available');
             return null;
         }
 
-        // Legacy capture grain disabled so ProCCD is the only image-processing effect.
-        // this.drawCaptureOverlay(this.isCCDActive());
+        const osdState = this.buildOSDState({ forceRecOn: true, recOn: true });
 
-        // Convert to base64 - low quality JPEG for authentic block/ring artifacts
         return {
             data: this.canvas.toDataURL('image/jpeg', 0.70),
             number: String(this.photoCount).padStart(5, '0'),
-            timestamp: this.getOverlayTimestamp()
+            timestamp: osdState.timestamp,
+            overlay: {
+                timerValue: osdState.timerValue,
+                storageValue: osdState.storageValue,
+                timestamp: osdState.timestamp,
+                batteryText: osdState.batteryText,
+                batteryLevel: osdState.batteryLevel,
+                recOn: true
+            }
         };
     }
 
@@ -414,6 +540,8 @@ class CameraCapture {
         this.glCanvas.height = targetHeight;
         this.osdCanvas.width = targetWidth;
         this.osdCanvas.height = targetHeight;
+        this.liveOsdCanvas.width = targetWidth;
+        this.liveOsdCanvas.height = targetHeight;
         this.osdCacheKey = null;
         this.syncCCDFilterSize();
     }
@@ -511,7 +639,7 @@ class CameraCapture {
         );
     }
 
-    renderCameraFrame({ forceRecOn = false } = {}) {
+    renderCameraFrame({ forceRecOn = false, drawHudToFrame = false } = {}) {
         if (
             !this.isStreaming ||
             !this.video ||
@@ -555,12 +683,75 @@ class CameraCapture {
         // filter), and must never escape uncaught here, or it silently kills the whole
         // requestAnimationFrame loop, freezing the live view with no HUD.
         try {
-            this.drawOverlay({ forceRecOn });
+            if (drawHudToFrame) {
+                this.drawOverlay({ forceRecOn });
+            }
+            this.drawLiveOverlay({ forceRecOn });
         } catch (error) {
             console.error('OSD overlay render failed:', error);
         }
 
         return true;
+    }
+
+    drawPhotoToCanvas(source, targetCanvas, photoEntry = null) {
+        if (!source || !targetCanvas) {
+            return;
+        }
+
+        const width = source.naturalWidth || source.videoWidth || source.width || this.canvas.width;
+        const height = source.naturalHeight || source.videoHeight || source.height || this.canvas.height;
+
+        if (!width || !height) {
+            return;
+        }
+
+        if (targetCanvas.width !== width || targetCanvas.height !== height) {
+            targetCanvas.width = width;
+            targetCanvas.height = height;
+        }
+
+        const ctx = targetCanvas.getContext('2d');
+        ctx.clearRect(0, 0, width, height);
+        ctx.drawImage(source, 0, 0, width, height);
+
+        if (photoEntry?.overlay) {
+            this.renderOSD(ctx, width, height, this.buildOSDState({
+                timerValue: photoEntry.overlay.timerValue,
+                storageValue: photoEntry.overlay.storageValue,
+                timestamp: photoEntry.overlay.timestamp || photoEntry.timestamp,
+                batteryText: photoEntry.overlay.batteryText,
+                batteryLevel: photoEntry.overlay.batteryLevel,
+                recOn: photoEntry.overlay.recOn
+            }));
+        }
+    }
+
+    async composePhotoDataURL(photoEntry) {
+        if (!photoEntry?.data || !photoEntry.overlay) {
+            return photoEntry?.data || '';
+        }
+
+        if (document.fonts?.ready) {
+            try {
+                await document.fonts.ready;
+            } catch (error) {
+                console.warn('OSD font readiness check failed:', error);
+            }
+        }
+
+        const image = new Image();
+        image.decoding = 'async';
+
+        await new Promise((resolve, reject) => {
+            image.onload = resolve;
+            image.onerror = reject;
+            image.src = photoEntry.data;
+        });
+
+        const canvas = document.createElement('canvas');
+        this.drawPhotoToCanvas(image, canvas, photoEntry);
+        return canvas.toDataURL('image/jpeg', 0.70);
     }
 
     stopStream() {

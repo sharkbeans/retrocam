@@ -26,7 +26,7 @@
 
     /* Typography */
     --font-size: 11px;
-    --font-family: 'Courier New', monospace;
+    --font-family: 'Share Tech Mono', 'Courier New', monospace;
 }
 
 /* ===== RESET & GENERAL ===== */
@@ -127,6 +127,7 @@ body {
 }
 
 .live-view {
+    position: relative;
     width: 100%;
     height: 100%;
     display: flex;
@@ -142,6 +143,21 @@ body {
     height: 100%;
     object-fit: cover;
     display: block;
+}
+
+.live-view-canvas {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+}
+
+.osd-layer {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 2;
+    pointer-events: none;
 }
 
 .live-view-content {
@@ -407,15 +423,21 @@ body {
     overflow: hidden;
 }
 
-#gallery-image {
+.gallery-stage {
+    position: absolute;
+    inset: 0;
+}
+
+#gallery-canvas {
     width: 100%;
     height: 100%;
     object-fit: cover;
+    display: block;
 }
 
 .gallery-empty {
     color: var(--accent-color);
-    font-size: 12px;
+    font-size: 10px;
     font-weight: bold;
     letter-spacing: 2px;
     display: none;
@@ -437,7 +459,7 @@ body {
 
 #gallery-counter-text {
     display: block;
-    font-size: 13px;
+    font-size: 11px;
     font-weight: bold;
     font-family: var(--font-family);
     letter-spacing: 1px;

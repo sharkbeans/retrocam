@@ -15,6 +15,7 @@ class Gallery {
 
     initElements() {
         this.galleryImage = document.getElementById('gallery-image');
+        this.galleryCanvas = document.getElementById('gallery-canvas');
         this.galleryEmpty = document.getElementById('gallery-empty');
         this.galleryCounter = document.getElementById('gallery-counter-text');
     }
@@ -39,21 +40,44 @@ class Gallery {
 
     updateDisplay() {
         if (this.galleryArray.length === 0) {
-            this.galleryImage.style.display = 'none';
+            this.galleryCanvas.style.display = 'none';
             this.galleryEmpty.classList.add('show');
             this.galleryCounter.textContent = '< 0/0 >';
         } else {
-            this.galleryImage.style.display = 'block';
+            this.galleryCanvas.style.display = 'block';
             this.galleryEmpty.classList.remove('show');
 
             const photo = this.galleryArray[this.currentIndex];
+            this.galleryImage.onload = () => this.renderPhoto(photo);
             this.galleryImage.src = photo.data;
+            if (this.galleryImage.complete) {
+                this.renderPhoto(photo);
+            }
 
             // Update counter display: < currentIndex/totalPhotos >
             const currentNumber = this.currentIndex + 1;
             const totalPhotos = this.galleryArray.length;
             this.galleryCounter.textContent = `< ${currentNumber}/${totalPhotos} >`;
         }
+    }
+
+    renderPhoto(photo) {
+        if (!this.galleryCanvas || !this.galleryImage) {
+            return;
+        }
+
+        if (cameraCapture) {
+            cameraCapture.drawPhotoToCanvas(this.galleryImage, this.galleryCanvas, photo);
+            return;
+        }
+
+        const ctx = this.galleryCanvas.getContext('2d');
+        const width = this.galleryImage.naturalWidth || 480;
+        const height = this.galleryImage.naturalHeight || 360;
+        this.galleryCanvas.width = width;
+        this.galleryCanvas.height = height;
+        ctx.clearRect(0, 0, width, height);
+        ctx.drawImage(this.galleryImage, 0, 0, width, height);
     }
 
     nextPhoto() {
@@ -70,12 +94,13 @@ class Gallery {
         this.flashLED();
     }
 
-    downloadCurrentPhoto() {
+    async downloadCurrentPhoto() {
         if (this.galleryArray.length === 0) return;
 
         const photo = this.galleryArray[this.currentIndex];
         const filename = this.buildFilename(photo.number);
-        this.downloadPhoto(photo.data, filename);
+        const photoDataUrl = await this.getShareablePhotoData(photo);
+        this.downloadPhoto(photoDataUrl, filename);
 
         // Flash LED to indicate download
         this.flashLED();
@@ -86,10 +111,11 @@ class Gallery {
 
         const photo = this.galleryArray[this.currentIndex];
         const filename = this.buildFilename(photo.number);
+        const photoDataUrl = await this.getShareablePhotoData(photo);
 
         if (this.isMobileDevice() && typeof navigator.share === 'function') {
             try {
-                const file = await this.createPhotoFile(photo.data, filename);
+                const file = await this.createPhotoFile(photoDataUrl, filename);
 
                 if (this.canUseNativeShare(file)) {
                     await navigator.share({
@@ -111,7 +137,7 @@ class Gallery {
             }
         }
 
-        this.downloadCurrentPhoto();
+        await this.downloadCurrentPhoto();
     }
 
     buildFilename(photoNumber) {
@@ -138,6 +164,14 @@ class Gallery {
     async createPhotoFile(dataURL, filename) {
         const blob = await this.dataURLtoBlob(dataURL);
         return new File([blob], filename, { type: 'image/jpeg' });
+    }
+
+    async getShareablePhotoData(photo) {
+        if (cameraCapture) {
+            return cameraCapture.composePhotoDataURL(photo);
+        }
+
+        return photo.data;
     }
 
     downloadPhoto(dataURL, filename) {

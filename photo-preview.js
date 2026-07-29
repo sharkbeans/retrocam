@@ -7,6 +7,7 @@ class PhotoPreview {
     constructor() {
         this.currentPhoto = null;
         this.currentPhotoNumber = null;
+        this.currentPhotoOverlay = null;
         this.galleryArray = [];
 
         this.initElements();
@@ -28,9 +29,10 @@ class PhotoPreview {
         this.backBtn.addEventListener('click', () => this.goBackToCamera());
     }
 
-    setPhoto(photoData, photoNumber, timestamp) {
+    setPhoto(photoData, photoNumber, timestamp, overlay = null) {
         this.currentPhoto = photoData;
         this.currentPhotoNumber = photoNumber;
+        this.currentPhotoOverlay = overlay;
 
         // Update preview screen
         this.previewImage.src = photoData;
@@ -49,7 +51,8 @@ class PhotoPreview {
         const photoEntry = {
             data: this.currentPhoto,
             number: this.currentPhotoNumber,
-            timestamp: this.getTimestamp()
+            timestamp: this.previewTimestamp.textContent || this.getTimestamp(),
+            overlay: this.currentPhotoOverlay
         };
 
         this.galleryArray.push(photoEntry);
@@ -70,14 +73,15 @@ class PhotoPreview {
         this.goBackToCamera();
     }
 
-    autoSavePhoto(photoData, photoNumber, timestamp) {
+    autoSavePhoto(photoData, photoNumber, timestamp, overlay = null) {
         console.log('autoSavePhoto called with:', { photoNumber, timestamp });
 
         // Auto-save without showing preview screen
         const photoEntry = {
             data: photoData,
             number: photoNumber,
-            timestamp: timestamp
+            timestamp: timestamp,
+            overlay: overlay
         };
 
         console.log('Gallery array before save:', this.galleryArray.length);
@@ -144,10 +148,13 @@ class PhotoPreview {
 
     async saveImageToDevice(photoEntry) {
         const filename = this.buildFilename(photoEntry.number);
+        const photoDataUrl = cameraCapture
+            ? await cameraCapture.composePhotoDataURL(photoEntry)
+            : photoEntry.data;
 
         if (this.isMobileDevice() && typeof navigator.share === 'function') {
             try {
-                const file = await this.createPhotoFile(photoEntry.data, filename);
+                const file = await this.createPhotoFile(photoDataUrl, filename);
 
                 if (this.canUseNativeShare(file)) {
                     await navigator.share({
@@ -169,7 +176,7 @@ class PhotoPreview {
             }
         }
 
-        this.downloadPhoto(photoEntry.data, filename);
+        this.downloadPhoto(photoDataUrl, filename);
         return 'downloaded';
     }
 
@@ -231,13 +238,5 @@ class PhotoPreview {
 // Initialize photo preview on page load
 let photoPreview;
 document.addEventListener('DOMContentLoaded', () => {
-    // Clear gallery on page load to avoid localStorage quota issues
-    try {
-        localStorage.removeItem('retroCamGallery');
-        console.log('✓ Gallery cleared on page load');
-    } catch (e) {
-        console.error('Failed to clear gallery:', e);
-    }
-
     photoPreview = new PhotoPreview();
 });
